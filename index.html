@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>業務角色扮演轉盤</title>
+  <link rel="stylesheet" href="./css/main.css">
+  <link rel="stylesheet" href="./css/spinner.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="app-header">
+    <h1>業務角色扮演轉盤</h1>
+    <p class="subtitle">隨機組合練習情境，提升你的銷售應對力</p>
+  </header>
+
+  <main class="app-main">
+    <div class="spinners-grid">
+      <div class="spinner-column" id="wheel-industry">
+        <h3 class="wheel-label">產業</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="industry">轉</button>
+      </div>
+
+      <div class="spinner-column" id="wheel-persona">
+        <h3 class="wheel-label">角色</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="persona">轉</button>
+      </div>
+
+      <div class="spinner-column" id="wheel-situation">
+        <h3 class="wheel-label">情境</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="situation">轉</button>
+      </div>
+
+      <div class="spinner-column" id="wheel-difficulty">
+        <h3 class="wheel-label">難度</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="difficulty">轉</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="spin-all">全部轉</button>
+      <button class="btn-secondary" id="reset-all">重新抽籤</button>
+    </div>
+
+    <div class="result-card" id="result-card">
+      <h2>你的練習情境</h2>
+      <div class="result-grid">
+        <div class="result-item">
+          <span class="result-label">產業</span>
+          <span class="result-value" id="result-industry">—</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">角色</span>
+          <span class="result-value" id="result-persona">—</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">情境</span>
+          <span class="result-value" id="result-situation">—</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">難度</span>
+          <span class="result-value" id="result-difficulty">—</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <p>Business Role Play Spinner Tool</p>
+  </footer>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
