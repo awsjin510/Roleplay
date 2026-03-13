@@ -75,7 +75,7 @@ body {
 .app-main {
   flex: 1;
   padding: 24px 16px;
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   width: 100%;
 }
@@ -88,10 +88,17 @@ body {
   margin-bottom: 24px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 640px) {
   .spinners-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .spinners-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
   }
 
   .gradient-text {
@@ -245,9 +252,15 @@ body {
   gap: 12px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 640px) {
   .result-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .result-grid {
+    grid-template-columns: repeat(6, 1fr);
   }
 }
 

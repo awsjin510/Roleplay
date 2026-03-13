@@ -18,6 +18,28 @@
 
   <main class="app-main">
     <div class="spinners-grid">
+      <div class="spinner-column" id="wheel-salesperson">
+        <h3 class="wheel-label">👤 業務</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="salesperson">🎲 轉</button>
+      </div>
+
+      <div class="spinner-column" id="wheel-product">
+        <h3 class="wheel-label">📦 產品</h3>
+        <div class="wheel-container">
+          <div class="wheel-viewport">
+            <div class="wheel-strip"></div>
+          </div>
+          <div class="wheel-pointer"></div>
+        </div>
+        <button class="spin-btn" data-wheel="product">🎲 轉</button>
+      </div>
+
       <div class="spinner-column" id="wheel-industry">
         <h3 class="wheel-label">🏢 產業</h3>
         <div class="wheel-container">
@@ -71,6 +93,14 @@
     <div class="result-card" id="result-card">
       <h2>你的練習情境</h2>
       <div class="result-grid">
+        <div class="result-item">
+          <span class="result-label">業務</span>
+          <span class="result-value" id="result-salesperson">—</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">產品</span>
+          <span class="result-value" id="result-product">—</span>
+        </div>
         <div class="result-item">
           <span class="result-label">產業</span>
           <span class="result-value" id="result-industry">—</span>
