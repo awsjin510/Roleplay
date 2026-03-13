@@ -1,3 +1,28 @@
+export const salespersons = [
+  'Howard',
+  'Wednesday',
+  'Han',
+  'Joanna',
+  'Phoebe',
+  'Ariel',
+  'Sherry',
+  'Herna',
+  'Jennifer',
+  'Hailey'
+];
+
+export const products = [
+  '資安產品',
+  '資安服務',
+  'MDR',
+  'SOC',
+  'MSSP',
+  '雲端服務',
+  'CMSP',
+  'IDC',
+  'CDN'
+];
+
 export const industries = [
   '遊戲產業',
   '電商平台',

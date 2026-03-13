@@ -1,8 +1,18 @@
-import { industries, personas, situations, difficulties } from './data.js';
+import { salespersons, products, industries, personas, situations, difficulties } from './data.js';
 import { SpinnerWheel } from './spinner.js';
 
 // Initialize wheels
 const wheels = {
+  salesperson: new SpinnerWheel(
+    document.querySelector('#wheel-salesperson .wheel-container'),
+    salespersons,
+    'salesperson'
+  ),
+  product: new SpinnerWheel(
+    document.querySelector('#wheel-product .wheel-container'),
+    products,
+    'product'
+  ),
   industry: new SpinnerWheel(
     document.querySelector('#wheel-industry .wheel-container'),
     industries,
@@ -27,6 +37,8 @@ const wheels = {
 
 // Result elements
 const resultEls = {
+  salesperson: document.getElementById('result-salesperson'),
+  product: document.getElementById('result-product'),
   industry: document.getElementById('result-industry'),
   persona: document.getElementById('result-persona'),
   situation: document.getElementById('result-situation'),
@@ -43,8 +55,8 @@ document.addEventListener('wheel-change', (e) => {
 
 // Spin All button
 document.getElementById('spin-all').addEventListener('click', async () => {
-  const keys = ['industry', 'persona', 'situation', 'difficulty'];
-  const delays = [0, 200, 400, 600];
+  const keys = ['salesperson', 'product', 'industry', 'persona', 'situation', 'difficulty'];
+  const delays = [0, 150, 300, 450, 600, 750];
 
   keys.forEach((key, i) => {
     setTimeout(() => {
