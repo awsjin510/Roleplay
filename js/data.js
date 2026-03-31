@@ -2,7 +2,6 @@ export const salespersons = [
   'Howard',
   'Wednesday',
   'Han',
-  'Joanna',
   'Phoebe',
   'Ariel',
   'Sherry',
