@@ -92,10 +92,11 @@ function ApiKeyModal({ onSaved }) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'content-type':'application/json', 'x-api-key': val.trim(), 'anthropic-version':'2023-06-01' },
+        headers: { 'content-type':'application/json', 'x-api-key': val.trim(), 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
         body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:5, messages:[{role:'user',content:'hi'}] }),
       });
-      if (res.status === 401) { setErr('API Key 無效，請確認'); setTesting(false); return; }
+      if (res.status === 401) { setErr('API Key 無效，請重新確認'); setTesting(false); return; }
+      if (!res.ok) { const d=await res.json().catch(()=>({})); setErr('驗證失敗：'+(d.error?.message||res.status)); setTesting(false); return; }
       saveApiKey(val.trim());
       onSaved();
     } catch(e) {
@@ -190,7 +191,7 @@ async function sendMessage(conversationHistory, systemPrompt) {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'content-type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' },
+      headers: { 'content-type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
       body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1000, system: systemPrompt, messages: conversationHistory }),
     });
     const data = await res.json();
