@@ -185,14 +185,14 @@ ${conversationLog}
 {"overallScore":75,"grade":"B","summary":"總結50字","strengths":["優點1","優點2"],"improvements":["改進1","改進2"],"missedOpportunities":["錯過機會1"],"keyMoment":"關鍵轉折描述","coachAdvice":"具體建議100字","metricsAnalysis":{"trustTrend":"上升","interestTrend":"持平","buyIntentTrend":"下降","analysis":"分析50字"}}`;
 }
 
-async function sendMessage(conversationHistory, systemPrompt) {
+async function sendMessage(conversationHistory, systemPrompt, maxTokens=1000) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('No API key');
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1000, system: systemPrompt, messages: conversationHistory }),
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:maxTokens, system: systemPrompt, messages: conversationHistory }),
     });
     const data = await res.json();
     if (!data.content) throw new Error(data.error?.message || 'API Error');
@@ -238,9 +238,9 @@ function SimpleLineChart({ data }) {
 // CIRCULAR GAUGE
 // ============================================================
 function CircularGauge({ label, value, color }) {
-  const r=36, sw=6, nr=r-sw/2, c=nr*2*Math.PI, off=c-(value/100)*c;
+  const r=46, sw=7, nr=r-sw/2, c=nr*2*Math.PI, off=c-(value/100)*c;
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
       <div style={{position:'relative',width:r*2,height:r*2}}>
         <svg width={r*2} height={r*2} style={{transform:'rotate(-90deg)'}}>
           <circle stroke="rgba(255,255,255,0.1)" fill="transparent" strokeWidth={sw} r={nr} cx={r} cy={r}/>
@@ -249,10 +249,10 @@ function CircularGauge({ label, value, color }) {
             style={{transition:'stroke-dashoffset 0.5s ease'}}/>
         </svg>
         <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <span style={{fontSize:14,fontWeight:700,color:'white'}}>{value}</span>
+          <span style={{fontSize:17,fontWeight:700,color:'white'}}>{value}</span>
         </div>
       </div>
-      <span style={{fontSize:11,color:'rgba(255,255,255,0.5)'}}>{label}</span>
+      <span style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.55)'}}>{label}</span>
     </div>
   );
 }
@@ -408,14 +408,21 @@ function ChatPhase({ scenario, onEnd }) {
     <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
       {toast&&<div style={{position:'fixed',top:14,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.96)',color:'white',padding:'11px 18px',borderRadius:12,fontSize:13,maxWidth:360,textAlign:'center',zIndex:1000,boxShadow:'0 8px 32px rgba(0,0,0,0.3)',animation:'fadeInDown 0.3s ease'}}>💡 {toast}</div>}
 
-      <div style={{background:'rgba(0,0,0,0.45)',borderBottom:'1px solid rgba(255,255,255,0.07)',padding:'7px 12px',display:'flex',flexWrap:'wrap',gap:5,alignItems:'center',flexShrink:0}}>
-        <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginRight:3}}>情境</span>
-        {CATEGORIES.map(cat=>(
-          <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':'rgba(255,255,255,0.65)'}}>
-            {SLOT_DATA[cat].icon} {scenario[cat]}
+      <div style={{background:'rgba(0,0,0,0.45)',borderBottom:'1px solid rgba(255,255,255,0.07)',padding:'6px 12px',display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+          <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginRight:3}}>情境</span>
+          {CATEGORIES.map(cat=>(
+            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':'rgba(255,255,255,0.65)'}}>
+              {SLOT_DATA[cat].icon} {scenario[cat]}
+            </span>
+          ))}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:6,padding:'2px 10px',fontSize:12,fontWeight:600,color:'#a5b4fc'}}>
+            第 {turns} 輪
           </span>
-        ))}
-        <span style={{marginLeft:'auto',color:'rgba(255,255,255,0.3)',fontSize:11}}>第 {turns} 輪</span>
+          {loading&&<span style={{fontSize:11,color:'rgba(255,255,255,0.3)'}}>AI 回覆中...</span>}
+        </div>
       </div>
 
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
@@ -456,12 +463,12 @@ function ChatPhase({ scenario, onEnd }) {
           </div>
         </div>
 
-        <div style={{width:112,borderLeft:'1px solid rgba(255,255,255,0.06)',padding:'14px 6px',display:'flex',flexDirection:'column',gap:16,alignItems:'center',flexShrink:0,overflowY:'auto'}}>
-          <div style={{fontSize:10,color:'rgba(255,255,255,0.28)',textAlign:'center',letterSpacing:'0.05em'}}>教練視角</div>
+        <div style={{width:160,borderLeft:'1px solid rgba(255,255,255,0.06)',padding:'14px 10px',display:'flex',flexDirection:'column',gap:18,alignItems:'center',flexShrink:0,overflowY:'auto'}}>
+          <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.4)',textAlign:'center',letterSpacing:'0.06em'}}>🎓 教練視角</div>
           <CircularGauge label="信任度" value={metrics.trust} color="#6366f1"/>
           <CircularGauge label="興趣度" value={metrics.interest} color="#a855f7"/>
           <CircularGauge label="購買意願" value={metrics.buyIntent} color="#06b6d4"/>
-          {metrics.notes&&<div style={{fontSize:10,color:'rgba(255,255,255,0.35)',textAlign:'center',lineHeight:1.5,padding:'0 3px'}}>{metrics.notes}</div>}
+          {metrics.notes&&<div style={{fontSize:11,color:'rgba(255,255,255,0.4)',textAlign:'center',lineHeight:1.5,padding:'0 4px'}}>{metrics.notes}</div>}
         </div>
       </div>
     </div>
@@ -476,8 +483,13 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
   const [loading,setLoading]=useState(true);
   useEffect(()=>{
     (async()=>{
-      const r=await sendMessage([{role:'user',content:buildReviewPrompt(scenario,log,mHistory)}],'你是資深銷售培訓教練，用JSON格式提供覆盤。');
-      try{ const m=r.text.match(/\{[\s\S]*\}/); if(m) setReview(JSON.parse(m[0])); else setReview({error:true}); }
+      const r=await sendMessage([{role:'user',content:buildReviewPrompt(scenario,log,mHistory)}],'你是資深銷售培訓教練，用JSON格式提供覆盤。',2000);
+      try{
+        // 用深度追蹤正確擷取最外層 JSON 物件
+        const extractJSON=(s)=>{const i=s.indexOf('{');if(i<0)return null;let d=0;for(let j=i;j<s.length;j++){if(s[j]==='{')d++;else if(s[j]==='}'){d--;if(d===0)return s.slice(i,j+1);}}return null;};
+        const jsonStr=extractJSON(r.text);
+        if(jsonStr) setReview(JSON.parse(jsonStr)); else setReview({error:true});
+      }
       catch{ setReview({error:true}); }
       setLoading(false);
     })();
