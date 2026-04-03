@@ -33,35 +33,67 @@ const { useState, useRef, useEffect, useCallback } = React;
 // DATA
 // ============================================================
 const SLOT_DATA = {
-  業務: { icon: "👤", items: ["Herna", "Jennifer", "Hailey", "Howard", "Wednesday"] },
-  產品: { icon: "🎁", items: ["MDR", "SOC", "MSSP", "雲端服務", "CMSP"] },
-  產業: { icon: "🏢", items: ["廣告代理商", "SI系統整合商", "政府機關", "新創公司", "遊戲產業"] },
-  角色: { icon: "🧑‍💼", items: ["行政助理", "IT窗口", "MIS工程師", "IT主管", "資訊長(CIO)"] },
-  情境: { icon: "📋", items: ["主管要求降低成本", "IT設備即將到期", "想做系統備援", "資料備份不足", "正在做數位轉型"] },
-  難度: { icon: "🔥", color: "red", items: ["客戶只談價格", "客戶不信任新供應商", "客戶認為現在系統很好", "客戶一直提競品", "客戶要求立刻報價"] },
+  業務: { icon: "👤", items: ["Howard","Wednesday","Han","Phoebe","Ariel","Sherry","Herna","Jennifer","Hailey"] },
+  產品: { icon: "🎁", items: ["資安產品","資安服務","MDR","SOC","MSSP","雲端服務","CMSP","IDC","CDN"] },
+  產業: { icon: "🏢", items: ["遊戲產業","電商平台","零售品牌","連鎖餐飲","製造業","傳統工廠","醫療院所","生技公司","金融機構","保險公司","行銷公司","廣告代理商","SI系統整合商","政府機關","新創公司"] },
+  角色: { icon: "🧑‍💼", items: ["總機","行政助理","IT窗口","MIS工程師","IT主管","資訊長(CIO)","採購","PM專案經理","技術主管","部門主管","老闆","營運主管"] },
+  情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
+  難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
 };
 const CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
+  總機: { techLevel:"無", decisionPower:"無，只負責轉接電話", personality:"禮貌但防衛性高，習慣婉拒陌生來電", concerns:"不想惹麻煩、不想被主管責怪接了推銷電話" },
   行政助理: { techLevel:"低", decisionPower:"無，需要轉達上級", personality:"友善但不懂技術，會問很基本的問題", concerns:"怕麻煩、怕選錯被罵" },
   IT窗口: { techLevel:"中", decisionPower:"建議權，需主管核准", personality:"務實，關注實際操作面", concerns:"維護工作量、與現有系統相容性" },
   MIS工程師: { techLevel:"高", decisionPower:"技術評估權，預算需上報", personality:"會問深入技術問題，對誇大宣傳反感", concerns:"技術規格、SLA、整合難度" },
   IT主管: { techLevel:"中高", decisionPower:"有預算裁量權", personality:"注重 ROI 和管理效率", concerns:"人力配置、總擁有成本、廠商穩定度" },
   "資訊長(CIO)": { techLevel:"策略層", decisionPower:"最終決策者", personality:"時間寶貴，只看重點和策略價值", concerns:"企業策略對齊、風險管控、數位轉型藍圖" },
+  採購: { techLevel:"低", decisionPower:"採購流程執行者，需技術部門認可", personality:"關注合約條款、付款方式、價格談判", concerns:"價格、交期、售後保固、合規文件" },
+  PM專案經理: { techLevel:"中", decisionPower:"專案預算決策，需IT配合", personality:"以交付時程為優先，重視專案風險", concerns:"導入時間、廠商配合度、不影響現有專案" },
+  技術主管: { techLevel:"很高", decisionPower:"技術架構決策者，向CIO報告", personality:"非常注重技術細節，會測試你的技術深度", concerns:"架構設計、擴充性、團隊學習曲線" },
+  部門主管: { techLevel:"低", decisionPower:"部門預算決策者", personality:"只關心業務影響，不懂技術細節", concerns:"能否解決業務痛點、不影響業務運作" },
+  老闆: { techLevel:"低到中", decisionPower:"公司最高決策者", personality:"時間極度有限，只看大局和數字", concerns:"ROI、競爭優勢、公司形象、不踩雷" },
+  營運主管: { techLevel:"中", decisionPower:"營運預算決策者", personality:"關注系統穩定性和效率，怕停機", concerns:"SLA保證、停機損失、維護成本、人員培訓" },
 };
 const industryProfiles = {
+  遊戲產業: { budget:"兩極化（大廠充裕，獨立工作室有限）", painPoints:"DDoS防護、玩家數據安全、高可用性", culture:"技術導向、重視用戶體驗" },
+  電商平台: { budget:"充裕，但ROI要求高", painPoints:"高峰流量、99.99%可用性、支付安全、CDN加速", culture:"數據驅動、重視轉換率和速度" },
+  零售品牌: { budget:"中等", painPoints:"POS系統穩定、庫存整合、會員資料保護", culture:"傳統零售思維，數位轉型中" },
+  連鎖餐飲: { budget:"有限，成本敏感", painPoints:"POS穩定性、多據點管理、訂單系統", culture:"以穩定和低成本為主，不太懂IT" },
+  製造業: { budget:"中高，看產線效益", painPoints:"ERP整合、工廠自動化、供應鏈安全", culture:"保守、重視不影響生產線" },
+  傳統工廠: { budget:"有限，極度保守", painPoints:"老舊設備連網、基本資安、最小化停機", culture:"非常保守，對新科技高度懷疑" },
+  醫療院所: { budget:"有但採購流程嚴格", painPoints:"病患資料安全、系統不能停機、法規合規", culture:"嚴格合規要求，決策流程漫長" },
+  生技公司: { budget:"充裕，R&D投入大", painPoints:"研發資料保護、法規遵循、知識產權安全", culture:"重視資安和合規，謹慎評估廠商" },
+  金融機構: { budget:"充裕，但採購嚴格", painPoints:"零停機要求、資安認證、法遵、資料主權", culture:"極度保守，需要完整資安合規文件" },
+  保險公司: { budget:"中高", painPoints:"客戶資料保護、理賠系統穩定、資料分析", culture:"重視法遵和資料治理，審查嚴格" },
+  行銷公司: { budget:"中等，彈性高", painPoints:"客戶資料安全、快速部署、創意工具整合", culture:"步調快、重視效率和靈活性" },
   廣告代理商: { budget:"中等，但彈性大", painPoints:"客戶資料安全、快速部署、多專案管理", culture:"步調快、重視創意與效率" },
   SI系統整合商: { budget:"看專案而定", painPoints:"需要轉售或搭配方案、技術支援品質", culture:"懂技術、會比較多家方案" },
   政府機關: { budget:"有預算但流程冗長", painPoints:"合規要求、資安等級、採購法規", culture:"保守、重視公文與正式流程" },
   新創公司: { budget:"有限但願意投資關鍵領域", painPoints:"快速擴展、成本效益、未來擴充性", culture:"敏捷、願意嘗試新方案" },
-  遊戲產業: { budget:"兩極化（大廠充裕，獨立工作室有限）", painPoints:"DDoS防護、玩家數據安全、高可用性", culture:"技術導向、重視用戶體驗" },
 };
 const difficultyBehaviors = {
+  客戶非常忙: "頻繁看手機或時鐘，用一兩句話打發你，暗示沒時間聽長篇說明",
+  客戶不耐煩: "語氣急促，對重複或模糊的回答明顯不耐，會嘆氣或打斷",
+  客戶一直打斷: "業務還沒說完就插話提問，讓你很難完整說明一個論點",
+  客戶只願意給5分鐘: "一開始就說只有5分鐘，之後不斷催促，說時間快到了",
+  客戶非常懂技術: "問非常深入的技術問題（頻寬、延遲、加密標準），對誇大或模糊說法立即反駁",
   客戶只談價格: "每次回應都要提到價格或預算限制，不斷要求降價或比價",
   客戶不信任新供應商: "反覆質疑你們公司的規模、經驗、客戶案例，問很多信任驗證的問題",
   客戶認為現在系統很好: "不斷強調現有方案運作正常，質疑為何要改變，需要很強的理由才會動搖",
   客戶一直提競品: "持續拿競品來比較，問你們跟競品廠商比有什麼優勢",
   客戶要求立刻報價: "急著要報價單，不想花時間聽產品介紹，催促快點給數字",
+  客戶一直說沒預算: "任何方案都說沒預算，把預算當做拒絕的擋箭牌",
+  客戶一直拖延: "對方案感興趣但總是說再考慮、下次再說，給各種理由推遲決定",
+  客戶要求先寄資料: "不想繼續對話，用「先寄資料給我看看」來結束會議",
+  客戶只願意Email溝通: "說不方便電話，要求所有溝通用Email，避免即時回應",
+  客戶認為你們太小: "質疑公司規模、服務能力，擔心合作後廠商倒閉或支援不足",
+  客戶只關心穩定性: "對功能、價格都不太在意，只反覆問SLA、停機時間、備援機制",
+  客戶很保守: "對任何改變都非常抗拒，需要極大的安全感才願意考慮",
+  客戶要求成功案例: "要求提供同產業的成功客戶名單，沒有案例就不願深談",
+  客戶認為雲端太貴: "每次提到雲端就說太貴，堅持現有設備還可以用，不想額外支出",
+  客戶擔心資安: "對把資料放在外部或雲端非常擔心，問很多關於資安和資料主權的問題",
 };
 const HINTS = [
   "試著詢問客戶目前的痛點，而非直接推產品",
@@ -286,16 +318,25 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
   useEffect(()=>{ if(spinTrigger>0) doSpin(); },[spinTrigger]);
   useEffect(()=>()=>clearTimeout(tmr.current),[]);
 
+  // Show a window of 5 items centered on selected (works for any list length)
+  const n = data.items.length;
+  const WIN = 5, HALF = 2;
+  const window5 = Array.from({length:WIN}, (_,i) => {
+    const offset = i - HALF;
+    const idx = ((sel + offset) % n + n) % n;
+    return { idx, item: data.items[idx], isSel: offset === 0 };
+  });
+
   return (
     <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'16px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:10,flex:1,minWidth:110}}>
       <div style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'0.04em'}}>{data.icon} {category}</div>
-      <div style={{width:'100%',borderRadius:10,background:'rgba(0,0,0,0.3)',padding:'8px 5px',display:'flex',flexDirection:'column',gap:5}}>
-        {data.items.map((item,i)=>(
-          <div key={i} style={{padding:'6px 7px',borderRadius:8,textAlign:'center',fontSize:11,
-            fontWeight:i===sel?700:400,color:i===sel?'white':'rgba(255,255,255,0.28)',
-            background:i===sel?`rgba(${isRed?'239,68,68':'99,102,241'},0.2)`:'transparent',
-            border:i===sel?`1px solid ${gc}55`:'1px solid transparent',
-            boxShadow:i===sel?`0 0 10px ${gc}30`:'none',transition:'all 0.08s ease'}}>
+      <div style={{width:'100%',borderRadius:10,background:'rgba(0,0,0,0.3)',padding:'8px 5px',display:'flex',flexDirection:'column',gap:4,overflow:'hidden'}}>
+        {window5.map(({idx,item,isSel})=>(
+          <div key={idx} style={{padding:'6px 7px',borderRadius:8,textAlign:'center',fontSize:11,
+            fontWeight:isSel?700:400,color:isSel?'white':'rgba(255,255,255,0.28)',
+            background:isSel?`rgba(${isRed?'239,68,68':'99,102,241'},0.2)`:'transparent',
+            border:isSel?`1px solid ${gc}55`:'1px solid transparent',
+            boxShadow:isSel?`0 0 10px ${gc}30`:'none',transition:'all 0.08s ease'}}>
             {item}
           </div>
         ))}
