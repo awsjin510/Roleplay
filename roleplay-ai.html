@@ -292,7 +292,7 @@ function CircularGauge({ label, value, color }) {
 // ============================================================
 // SLOT COLUMN
 // ============================================================
-function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
+function SlotColumn({ category, data, onSpinComplete, spinTrigger, wide }) {
   const [sel, setSel] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const tmr = useRef(null);
@@ -347,7 +347,7 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
   );
 
   return (
-    <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'16px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:6,flex:1,minWidth:110}}>
+    <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'16px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:6,flex:wide?1.6:1,minWidth:wide?160:110}}>
       <div style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'0.04em'}}>{data.icon} {category}</div>
       {navBtn(-1, '▲')}
       <div style={{width:'100%',borderRadius:10,background:'rgba(0,0,0,0.3)',padding:'8px 5px',display:'flex',flexDirection:'column',gap:4,overflow:'hidden'}}>
@@ -395,7 +395,7 @@ function SetupPhase({ onStart }) {
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center'}}>
         {CATEGORIES.map(cat=>(
-          <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]}/>
+          <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} wide={cat==='難度'}/>
         ))}
       </div>
       <div style={{display:'flex',gap:10,justifyContent:'center'}}>
