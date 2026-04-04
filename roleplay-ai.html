@@ -292,34 +292,43 @@ function CircularGauge({ label, value, color }) {
 // ============================================================
 // SLOT COLUMN
 // ============================================================
-function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
+function SlotColumn({ category, data, onSpinComplete, spinTrigger, wide }) {
   const [sel, setSel] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const tmr = useRef(null);
   const isRed = data.color === 'red';
   const gc = isRed ? '#ef4444' : '#6366f1';
+  const n = data.items.length;
+
+  const step = useCallback((dir) => {
+    if (spinning) return;
+    setSel(i => {
+      const next = ((i + dir) % n + n) % n;
+      onSpinComplete(category, data.items[next]);
+      return next;
+    });
+  }, [spinning, n, data, category, onSpinComplete]);
 
   const doSpin = useCallback(() => {
     if (spinning) return;
     setSpinning(true);
     let speed=50, elapsed=0;
-    const target=Math.floor(Math.random()*data.items.length);
+    const target=Math.floor(Math.random()*n);
     const total=1800+Math.random()*800;
     const tick=()=>{
-      setSel(i=>(i+1)%data.items.length);
+      setSel(i=>(i+1)%n);
       elapsed+=speed;
       if(elapsed>total*0.6) speed=Math.min(320,speed*1.09);
       if(elapsed>=total){ setSel(target); setSpinning(false); onSpinComplete(category,data.items[target]); }
       else { tmr.current=setTimeout(tick,speed); }
     };
     tmr.current=setTimeout(tick,speed);
-  },[spinning,data,category,onSpinComplete]);
+  },[spinning,data,n,category,onSpinComplete]);
 
   useEffect(()=>{ if(spinTrigger>0) doSpin(); },[spinTrigger]);
   useEffect(()=>()=>clearTimeout(tmr.current),[]);
 
   // Show a window of 5 items centered on selected (works for any list length)
-  const n = data.items.length;
   const WIN = 5, HALF = 2;
   const window5 = Array.from({length:WIN}, (_,i) => {
     const offset = i - HALF;
@@ -327,9 +336,20 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
     return { idx, item: data.items[idx], isSel: offset === 0 };
   });
 
+  const navBtn = (dir, label) => (
+    <button onClick={()=>step(dir)} disabled={spinning} style={{
+      width:'100%',padding:'4px 0',background:'rgba(255,255,255,0.04)',
+      border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,color:'rgba(255,255,255,0.45)',
+      fontSize:13,cursor:spinning?'not-allowed':'pointer',lineHeight:1,
+      transition:'all 0.15s',opacity:spinning?0.3:1}}>
+      {label}
+    </button>
+  );
+
   return (
-    <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'16px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:10,flex:1,minWidth:110}}>
+    <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'16px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:6,flex:wide?1.6:1,minWidth:wide?160:110}}>
       <div style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'0.04em'}}>{data.icon} {category}</div>
+      {navBtn(-1, '▲')}
       <div style={{width:'100%',borderRadius:10,background:'rgba(0,0,0,0.3)',padding:'8px 5px',display:'flex',flexDirection:'column',gap:4,overflow:'hidden'}}>
         {window5.map(({idx,item,isSel})=>(
           <div key={idx} style={{padding:'6px 7px',borderRadius:8,textAlign:'center',fontSize:11,
@@ -341,6 +361,7 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
           </div>
         ))}
       </div>
+      {navBtn(1, '▼')}
       <button onClick={doSpin} disabled={spinning} style={{
         width:'100%',padding:'8px 0',
         background:spinning?'rgba(255,255,255,0.05)':`linear-gradient(135deg,${gc},${isRed?'#dc2626':'#a855f7'})`,
@@ -374,7 +395,7 @@ function SetupPhase({ onStart }) {
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center'}}>
         {CATEGORIES.map(cat=>(
-          <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]}/>
+          <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} wide={cat==='難度'}/>
         ))}
       </div>
       <div style={{display:'flex',gap:10,justifyContent:'center'}}>
