@@ -85,6 +85,24 @@
       </div>
     </div>
 
+    <div id="cloud-env-section" style="display:none;margin-top:8px;">
+      <div class="cloud-env-divider">
+        <span class="cloud-env-label">☁️ 雲端環境（產品為雲端服務時啟用）</span>
+      </div>
+      <div class="spinners-grid spinners-grid--single">
+        <div class="spinner-column" id="wheel-cloud-env">
+          <h3 class="wheel-label">☁️ 雲端環境</h3>
+          <div class="wheel-container">
+            <div class="wheel-viewport">
+              <div class="wheel-strip"></div>
+            </div>
+            <div class="wheel-pointer"></div>
+          </div>
+          <button class="spin-btn" data-wheel="cloud-env">🎲 轉</button>
+        </div>
+      </div>
+    </div>
+
     <div class="actions">
       <button class="btn-primary pulse-glow" id="spin-all">🎰 全部轉！</button>
       <button class="btn-secondary" id="reset-all">🔄 重新抽籤</button>
@@ -117,6 +135,10 @@
         <div class="result-item">
           <span class="result-label">難度</span>
           <span class="result-value" id="result-difficulty">—</span>
+        </div>
+        <div class="result-item" id="result-item-cloud-env" style="display:none;">
+          <span class="result-label">☁️ 雲端環境</span>
+          <span class="result-value result-value--cloud" id="result-cloud-env">—</span>
         </div>
       </div>
     </div>
