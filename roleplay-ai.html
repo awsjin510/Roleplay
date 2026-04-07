@@ -37,7 +37,13 @@ const SLOT_DATA = {
   產品: { icon: "🎁", items: ["MDR", "SOC", "MSSP", "雲端服務", "CMSP"] },
   產業: { icon: "🏢", items: ["廣告代理商", "SI系統整合商", "政府機關", "新創公司", "遊戲產業"] },
   角色: { icon: "🧑‍💼", items: ["行政助理", "IT窗口", "MIS工程師", "IT主管", "資訊長(CIO)"] },
-  情境: { icon: "📋", items: ["主管要求降低成本", "IT設備即將到期", "想做系統備援", "資料備份不足", "正在做數位轉型"] },
+  情境: { icon: "📋", items: [
+    "主管要求降低成本", "IT設備即將到期", "想做系統備援", "資料備份不足", "正在做數位轉型",
+    "正在評估上雲", "資料中心老舊", "公司要求上雲", "正在評估多雲架構", "想降低維運成本",
+    "系統部署太慢", "客戶要求高可用", "海外據點增加", "考慮從地端遷移上雲", "雲端費用超出預算",
+    "多雲管理太複雜", "資料量快速成長", "新產品即將上線需要彈性擴容",
+  ]},
+  雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
   難度: { icon: "🔥", color: "red", items: ["客戶只談價格", "客戶不信任新供應商", "客戶認為現在系統很好", "客戶一直提競品", "客戶要求立刻報價"] },
 };
 const CATEGORIES = Object.keys(SLOT_DATA);
@@ -55,6 +61,38 @@ const industryProfiles = {
   政府機關: { budget:"有預算但流程冗長", painPoints:"合規要求、資安等級、採購法規", culture:"保守、重視公文與正式流程" },
   新創公司: { budget:"有限但願意投資關鍵領域", painPoints:"快速擴展、成本效益、未來擴充性", culture:"敏捷、願意嘗試新方案" },
   遊戲產業: { budget:"兩極化（大廠充裕，獨立工作室有限）", painPoints:"DDoS防護、玩家數據安全、高可用性", culture:"技術導向、重視用戶體驗" },
+};
+const cloudEnvProfiles = {
+  AWS: {
+    familiarity: "熟悉 AWS 生態，用過 EC2、S3、RDS",
+    concerns: "帳單難以預測、Reserved Instance 規劃複雜、跨區域延遲",
+    attitude: "認為 AWS 是業界標準，會質疑你們方案能否完整整合 AWS 服務",
+    keywords: "費用優化、Cost Explorer、Savings Plans、多可用區高可用",
+  },
+  GCP: {
+    familiarity: "使用 GCP 做數據分析，BigQuery 是核心工具",
+    concerns: "台灣在地支援少、非 Google 原生服務整合麻煩",
+    attitude: "技術導向、重視 API 品質和自動化，對行銷話術不感興趣",
+    keywords: "BigQuery、Kubernetes、GKE、資料管線、AI/ML 整合",
+  },
+  Azure: {
+    familiarity: "公司已使用 Microsoft 365，Azure AD 是身份核心",
+    concerns: "License 費用複雜、與現有 on-prem AD 整合需要評估",
+    attitude: "重視合規與企業治理，對資安認證與稽核報告很在意",
+    keywords: "Azure AD、混合身份、Compliance、Teams 整合、EA合約",
+  },
+  本地機房: {
+    familiarity: "長期使用自建機房，IT團隊熟悉實體設備管理",
+    concerns: "資料不能離開台灣、擔心上雲後失去控制、資安風險",
+    attitude: "對雲端持懷疑態度，需要大量說服才考慮轉移，偏好漸進式",
+    keywords: "資料主權、合規落地、混合雲橋接、PoC 驗證",
+  },
+  混合雲: {
+    familiarity: "部分工作負載已在雲端，但地端與雲端整合有斷層",
+    concerns: "多環境管理複雜、資安政策難以統一、運維成本雙倍",
+    attitude: "想統一管理但不確定方向，對能簡化複雜度的方案有興趣",
+    keywords: "統一管理介面、網路互通、安全策略一致性、成本可視化",
+  },
 };
 const difficultyBehaviors = {
   客戶只談價格: "每次回應都要提到價格或預算限制，不斷要求降價或比價",
@@ -134,6 +172,14 @@ function buildSystemPrompt(scenario) {
   const role = roleProfiles[scenario.角色] || roleProfiles['IT窗口'];
   const industry = industryProfiles[scenario.產業] || industryProfiles['新創公司'];
   const difficulty = difficultyBehaviors[scenario.難度] || '';
+  const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
+  const cloudSection = cloudEnv ? `
+## 你的雲端環境背景（${scenario.雲端環境}）
+- 目前熟悉度：${cloudEnv.familiarity}
+- 你的顧慮：${cloudEnv.concerns}
+- 你的態度：${cloudEnv.attitude}
+- 你常提到的關鍵詞：${cloudEnv.keywords}
+` : '';
   return `你是一位${scenario.產業}的${scenario.角色}。
 
 ## 你的基本資訊
@@ -150,7 +196,7 @@ function buildSystemPrompt(scenario) {
 - 預算狀況：${industry.budget}
 - 產業痛點：${industry.painPoints}
 - 組織文化：${industry.culture}
-
+${cloudSection}
 ## 關於來訪的業務
 - 業務人員叫 ${scenario.業務}，來自一家資安/雲端服務公司
 - 他們要推銷的產品是：${scenario.產品}
@@ -165,6 +211,7 @@ ${difficulty}
 3. 適時提出反對意見和疑慮；業務答非所問時表現不耐煩
 4. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
 5. 對話開始時先簡短自我介紹並說明你的需求
+6. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
