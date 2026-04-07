@@ -39,8 +39,10 @@ const SLOT_DATA = {
   角色: { icon: "🧑‍💼", items: ["總機","行政助理","IT窗口","MIS工程師","IT主管","資訊長(CIO)","採購","PM專案經理","技術主管","部門主管","老闆","營運主管"] },
   情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
   難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
+  雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
 };
-const CATEGORIES = Object.keys(SLOT_DATA);
+const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境');
+const ALL_CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
   總機: { techLevel:"無", decisionPower:"無，只負責轉接電話", personality:"禮貌但防衛性高，習慣婉拒陌生來電", concerns:"不想惹麻煩、不想被主管責怪接了推銷電話" },
@@ -72,6 +74,38 @@ const industryProfiles = {
   SI系統整合商: { budget:"看專案而定", painPoints:"需要轉售或搭配方案、技術支援品質", culture:"懂技術、會比較多家方案" },
   政府機關: { budget:"有預算但流程冗長", painPoints:"合規要求、資安等級、採購法規", culture:"保守、重視公文與正式流程" },
   新創公司: { budget:"有限但願意投資關鍵領域", painPoints:"快速擴展、成本效益、未來擴充性", culture:"敏捷、願意嘗試新方案" },
+};
+const cloudEnvProfiles = {
+  AWS: {
+    familiarity: "熟悉 AWS 生態，用過 EC2、S3、RDS",
+    concerns: "帳單難以預測、Reserved Instance 規劃複雜、跨區域延遲",
+    attitude: "認為 AWS 是業界標準，會質疑你們方案能否完整整合 AWS 服務",
+    keywords: "費用優化、Cost Explorer、Savings Plans、多可用區高可用",
+  },
+  GCP: {
+    familiarity: "使用 GCP 做數據分析，BigQuery 是核心工具",
+    concerns: "台灣在地支援少、非 Google 原生服務整合麻煩",
+    attitude: "技術導向、重視 API 品質和自動化，對行銷話術不感興趣",
+    keywords: "BigQuery、Kubernetes、GKE、資料管線、AI/ML 整合",
+  },
+  Azure: {
+    familiarity: "公司已使用 Microsoft 365，Azure AD 是身份核心",
+    concerns: "License 費用複雜、與現有 on-prem AD 整合需要評估",
+    attitude: "重視合規與企業治理，對資安認證與稽核報告很在意",
+    keywords: "Azure AD、混合身份、Compliance、Teams 整合、EA合約",
+  },
+  本地機房: {
+    familiarity: "長期使用自建機房，IT團隊熟悉實體設備管理",
+    concerns: "資料不能離開台灣、擔心上雲後失去控制、資安風險",
+    attitude: "對雲端持懷疑態度，需要大量說服才考慮轉移，偏好漸進式",
+    keywords: "資料主權、合規落地、混合雲橋接、PoC 驗證",
+  },
+  混合雲: {
+    familiarity: "部分工作負載已在雲端，但地端與雲端整合有斷層",
+    concerns: "多環境管理複雜、資安政策難以統一、運維成本雙倍",
+    attitude: "想統一管理但不確定方向，對能簡化複雜度的方案有興趣",
+    keywords: "統一管理介面、網路互通、安全策略一致性、成本可視化",
+  },
 };
 const difficultyBehaviors = {
   客戶非常忙: "頻繁看手機或時鐘，用一兩句話打發你，暗示沒時間聽長篇說明",
@@ -166,6 +200,14 @@ function buildSystemPrompt(scenario) {
   const role = roleProfiles[scenario.角色] || roleProfiles['IT窗口'];
   const industry = industryProfiles[scenario.產業] || industryProfiles['新創公司'];
   const difficulty = difficultyBehaviors[scenario.難度] || '';
+  const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
+  const cloudSection = cloudEnv ? `
+## 你的雲端環境背景（${scenario.雲端環境}）
+- 目前熟悉度：${cloudEnv.familiarity}
+- 你的顧慮：${cloudEnv.concerns}
+- 你的態度：${cloudEnv.attitude}
+- 你常提到的關鍵詞：${cloudEnv.keywords}
+` : '';
   return `你是一位${scenario.產業}的${scenario.角色}。
 
 ## 你的基本資訊
@@ -182,7 +224,7 @@ function buildSystemPrompt(scenario) {
 - 預算狀況：${industry.budget}
 - 產業痛點：${industry.painPoints}
 - 組織文化：${industry.culture}
-
+${cloudSection}
 ## 關於來訪的業務
 - 業務人員叫 ${scenario.業務}，來自一家資安/雲端服務公司
 - 他們要推銷的產品是：${scenario.產品}
@@ -197,6 +239,7 @@ ${difficulty}
 3. 適時提出反對意見和疑慮；業務答非所問時表現不耐煩
 4. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
 5. 對話開始時先簡短自我介紹並說明你的需求
+6. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
@@ -378,12 +421,21 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger, wide }) {
 // ============================================================
 function SetupPhase({ onStart }) {
   const [selections, setSelections] = useState({});
-  const [triggers, setTriggers] = useState(()=>Object.fromEntries(CATEGORIES.map(c=>[c,0])));
-  const allSpun = Object.keys(selections).length===CATEGORIES.length;
+  const [triggers, setTriggers] = useState(()=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0])));
 
-  const handleDone = useCallback((cat,val)=>setSelections(p=>({...p,[cat]:val})),[]);
-  const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(CATEGORIES.map(c=>[c,p[c]+1]))); };
-  const reset = ()=>{ setSelections({}); setTriggers(Object.fromEntries(CATEGORIES.map(c=>[c,0]))); };
+  const isCloudProduct = selections.產品 === '雲端服務';
+  const requiredCats = isCloudProduct ? [...BASE_CATEGORIES, '雲端環境'] : BASE_CATEGORIES;
+  const allSpun = requiredCats.every(c => selections[c] !== undefined);
+
+  const handleDone = useCallback((cat, val) => {
+    setSelections(p => {
+      const next = {...p, [cat]: val};
+      if (cat === '產品' && val !== '雲端服務') delete next['雲端環境'];
+      return next;
+    });
+  }, []);
+  const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,p[c]+1]))); };
+  const reset = ()=>{ setSelections({}); setTriggers(Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0]))); };
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:22}}>
@@ -394,10 +446,24 @@ function SetupPhase({ onStart }) {
         <p style={{color:'rgba(255,255,255,0.45)',marginTop:8,fontSize:13}}>轉動轉盤，組合情境，與 AI 客戶對話練習</p>
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center'}}>
-        {CATEGORIES.map(cat=>(
+        {BASE_CATEGORIES.map(cat=>(
           <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} wide={cat==='難度'}/>
         ))}
       </div>
+      {isCloudProduct&&(
+        <div style={{animation:'fadeInUp 0.35s ease'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(6,182,212,0.4))'}}/>
+            <span style={{color:'#67e8f9',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>☁️ 雲端環境（產品為雲端服務時啟用）</span>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(6,182,212,0.4),transparent)'}}/>
+          </div>
+          <div style={{display:'flex',justifyContent:'center'}}>
+            <div style={{width:160}}>
+              <SlotColumn key="雲端環境" category="雲端環境" data={SLOT_DATA['雲端環境']} onSpinComplete={handleDone} spinTrigger={triggers['雲端環境']}/>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex',gap:10,justifyContent:'center'}}>
         <button onClick={spinAll} style={{padding:'13px 32px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:15,cursor:'pointer',boxShadow:'0 0 28px rgba(99,102,241,0.4)'}}>🎰 全部轉！</button>
         <button onClick={reset} style={{padding:'13px 22px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.7)',fontWeight:600,fontSize:14,cursor:'pointer'}}>🔄 重置</button>
@@ -406,10 +472,10 @@ function SetupPhase({ onStart }) {
         <div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:16,padding:18,animation:'fadeInUp 0.4s ease'}}>
           <h3 style={{color:'rgba(255,255,255,0.75)',margin:'0 0 12px 0',fontSize:14}}>📋 你的練習情境</h3>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:18}}>
-            {CATEGORIES.map(cat=>(
-              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'7px 13px',fontSize:12}}>
+            {requiredCats.map(cat=>(
+              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='雲端環境'?'rgba(6,182,212,0.3)':'rgba(255,255,255,0.1)'}`,borderRadius:10,padding:'7px 13px',fontSize:12}}>
                 <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>{SLOT_DATA[cat].icon} {cat}</span>
-                <span style={{color:cat==='難度'?'#fca5a5':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
+                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
               </div>
             ))}
           </div>
@@ -473,8 +539,8 @@ function ChatPhase({ scenario, onEnd }) {
       <div style={{background:'rgba(0,0,0,0.45)',borderBottom:'1px solid rgba(255,255,255,0.07)',padding:'6px 12px',display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
           <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginRight:3}}>情境</span>
-          {CATEGORIES.map(cat=>(
-            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':'rgba(255,255,255,0.65)'}}>
+          {ALL_CATEGORIES.filter(cat=>scenario[cat]!==undefined).map(cat=>(
+            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='難度'?'rgba(239,68,68,0.25)':cat==='雲端環境'?'rgba(6,182,212,0.25)':'rgba(255,255,255,0.08)'}`,borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'rgba(255,255,255,0.65)'}}>
               {SLOT_DATA[cat].icon} {scenario[cat]}
             </span>
           ))}
