@@ -326,6 +326,64 @@ body {
   letter-spacing: 0.05em;
 }
 
+/* === Cloud Env Section === */
+.cloud-env-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cloud-env-divider::before,
+.cloud-env-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.4), transparent);
+}
+
+.cloud-env-label {
+  color: #67e8f9;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.spinners-grid--single {
+  grid-template-columns: 1fr;
+  max-width: 180px;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .spinners-grid--single {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .spinners-grid--single {
+    grid-template-columns: 1fr;
+  }
+}
+
+.result-value--cloud {
+  background: linear-gradient(135deg, #22d3ee, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cloud-env-animate {
+  animation: fadeInUp 0.35s ease;
+}
+
 /* === Animations === */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }

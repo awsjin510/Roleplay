@@ -98,6 +98,14 @@ export const situations = [
   '想降低維運成本'
 ];
 
+export const cloudEnvironments = [
+  'AWS',
+  'GCP',
+  'Azure',
+  '本地機房',
+  '混合雲'
+];
+
 export const difficulties = [
   '客戶非常忙',
   '客戶不耐煩',
