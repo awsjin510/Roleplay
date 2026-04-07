@@ -46,7 +46,8 @@ const SLOT_DATA = {
   雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
   難度: { icon: "🔥", color: "red", items: ["客戶只談價格", "客戶不信任新供應商", "客戶認為現在系統很好", "客戶一直提競品", "客戶要求立刻報價"] },
 };
-const CATEGORIES = Object.keys(SLOT_DATA);
+const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境');
+const ALL_CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
   行政助理: { techLevel:"低", decisionPower:"無，需要轉達上級", personality:"友善但不懂技術，會問很基本的問題", concerns:"怕麻煩、怕選錯被罵" },
@@ -363,12 +364,21 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger }) {
 // ============================================================
 function SetupPhase({ onStart }) {
   const [selections, setSelections] = useState({});
-  const [triggers, setTriggers] = useState(()=>Object.fromEntries(CATEGORIES.map(c=>[c,0])));
-  const allSpun = Object.keys(selections).length===CATEGORIES.length;
+  const [triggers, setTriggers] = useState(()=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0])));
 
-  const handleDone = useCallback((cat,val)=>setSelections(p=>({...p,[cat]:val})),[]);
-  const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(CATEGORIES.map(c=>[c,p[c]+1]))); };
-  const reset = ()=>{ setSelections({}); setTriggers(Object.fromEntries(CATEGORIES.map(c=>[c,0]))); };
+  const isCloudProduct = selections.產品 === '雲端服務';
+  const requiredCats = isCloudProduct ? [...BASE_CATEGORIES, '雲端環境'] : BASE_CATEGORIES;
+  const allSpun = requiredCats.every(c => selections[c] !== undefined);
+
+  const handleDone = useCallback((cat, val) => {
+    setSelections(p => {
+      const next = {...p, [cat]: val};
+      if (cat === '產品' && val !== '雲端服務') delete next['雲端環境'];
+      return next;
+    });
+  }, []);
+  const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,p[c]+1]))); };
+  const reset = ()=>{ setSelections({}); setTriggers(Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0]))); };
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:22}}>
@@ -379,10 +389,24 @@ function SetupPhase({ onStart }) {
         <p style={{color:'rgba(255,255,255,0.45)',marginTop:8,fontSize:13}}>轉動轉盤，組合情境，與 AI 客戶對話練習</p>
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center'}}>
-        {CATEGORIES.map(cat=>(
+        {BASE_CATEGORIES.map(cat=>(
           <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]}/>
         ))}
       </div>
+      {isCloudProduct&&(
+        <div style={{animation:'fadeInUp 0.35s ease',display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(6,182,212,0.4))'}}/>
+            <span style={{color:'#67e8f9',fontSize:12,fontWeight:600,letterSpacing:'0.06em'}}>☁️ 雲端環境（產品為雲端服務時啟用）</span>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(6,182,212,0.4),transparent)'}}/>
+          </div>
+          <div style={{display:'flex',justifyContent:'center'}}>
+            <div style={{maxWidth:180,width:'100%'}}>
+              <SlotColumn key="雲端環境" category="雲端環境" data={SLOT_DATA['雲端環境']} onSpinComplete={handleDone} spinTrigger={triggers['雲端環境']}/>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex',gap:10,justifyContent:'center'}}>
         <button onClick={spinAll} style={{padding:'13px 32px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:15,cursor:'pointer',boxShadow:'0 0 28px rgba(99,102,241,0.4)'}}>🎰 全部轉！</button>
         <button onClick={reset} style={{padding:'13px 22px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.7)',fontWeight:600,fontSize:14,cursor:'pointer'}}>🔄 重置</button>
@@ -391,10 +415,10 @@ function SetupPhase({ onStart }) {
         <div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:16,padding:18,animation:'fadeInUp 0.4s ease'}}>
           <h3 style={{color:'rgba(255,255,255,0.75)',margin:'0 0 12px 0',fontSize:14}}>📋 你的練習情境</h3>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:18}}>
-            {CATEGORIES.map(cat=>(
-              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'7px 13px',fontSize:12}}>
+            {requiredCats.map(cat=>(
+              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='雲端環境'?'rgba(6,182,212,0.3)':'rgba(255,255,255,0.1)'}`,borderRadius:10,padding:'7px 13px',fontSize:12}}>
                 <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>{SLOT_DATA[cat].icon} {cat}</span>
-                <span style={{color:cat==='難度'?'#fca5a5':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
+                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
               </div>
             ))}
           </div>
@@ -458,8 +482,8 @@ function ChatPhase({ scenario, onEnd }) {
       <div style={{background:'rgba(0,0,0,0.45)',borderBottom:'1px solid rgba(255,255,255,0.07)',padding:'6px 12px',display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
           <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginRight:3}}>情境</span>
-          {CATEGORIES.map(cat=>(
-            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':'rgba(255,255,255,0.65)'}}>
+          {ALL_CATEGORIES.filter(cat=>scenario[cat]!==undefined).map(cat=>(
+            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='難度'?'rgba(239,68,68,0.25)':cat==='雲端環境'?'rgba(6,182,212,0.25)':'rgba(255,255,255,0.08)'}`,borderRadius:6,padding:'2px 8px',fontSize:11,color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'rgba(255,255,255,0.65)'}}>
               {SLOT_DATA[cat].icon} {scenario[cat]}
             </span>
           ))}
