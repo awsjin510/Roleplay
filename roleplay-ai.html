@@ -243,7 +243,7 @@ ${difficulty}
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
-初始值 trust=20, interest=30, buyIntent=10，每輪變化 -10 到 +15。`;
+初始值 trust=35, interest=45, buyIntent=20。每輪變化幅度：表現好 +5 到 +15，普通 ±3，表現差 -3 到 -8（不要單輪暴跌）。對話較短時，指標變化要更細膩，避免10輪內就歸零。`;
 }
 
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
@@ -313,7 +313,7 @@ function SimpleLineChart({ data }) {
 // CIRCULAR GAUGE
 // ============================================================
 function CircularGauge({ label, value, color }) {
-  const r=46, sw=7, nr=r-sw/2, c=nr*2*Math.PI, off=c-(value/100)*c;
+  const r=54, sw=8, nr=r-sw/2, c=nr*2*Math.PI, off=c-(value/100)*c;
   return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
       <div style={{position:'relative',width:r*2,height:r*2}}>
@@ -324,7 +324,7 @@ function CircularGauge({ label, value, color }) {
             style={{transition:'stroke-dashoffset 0.5s ease'}}/>
         </svg>
         <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <span style={{fontSize:17,fontWeight:700,color:'white'}}>{value}</span>
+          <span style={{fontSize:20,fontWeight:700,color:'white'}}>{value}</span>
         </div>
       </div>
       <span style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.55)'}}>{label}</span>
@@ -493,8 +493,8 @@ function SetupPhase({ onStart }) {
 // ============================================================
 function ChatPhase({ scenario, onEnd }) {
   const [messages,setMessages]=useState([]);
-  const [metrics,setMetrics]=useState({trust:20,interest:30,buyIntent:10});
-  const [mHistory,setMHistory]=useState([{trust:20,interest:30,buyIntent:10}]);
+  const [metrics,setMetrics]=useState({trust:35,interest:45,buyIntent:20});
+  const [mHistory,setMHistory]=useState([{trust:35,interest:45,buyIntent:20}]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
   const [turns,setTurns]=useState(0);
@@ -591,12 +591,12 @@ function ChatPhase({ scenario, onEnd }) {
           </div>
         </div>
 
-        <div style={{width:160,borderLeft:'1px solid rgba(255,255,255,0.06)',padding:'14px 10px',display:'flex',flexDirection:'column',gap:18,alignItems:'center',flexShrink:0,overflowY:'auto'}}>
-          <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.4)',textAlign:'center',letterSpacing:'0.06em'}}>🎓 教練視角</div>
+        <div style={{width:210,borderLeft:'1px solid rgba(255,255,255,0.06)',padding:'16px 12px',display:'flex',flexDirection:'column',gap:20,alignItems:'center',flexShrink:0,overflowY:'auto'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.5)',textAlign:'center',letterSpacing:'0.06em'}}>🎓 教練視角</div>
           <CircularGauge label="信任度" value={metrics.trust} color="#6366f1"/>
           <CircularGauge label="興趣度" value={metrics.interest} color="#a855f7"/>
           <CircularGauge label="購買意願" value={metrics.buyIntent} color="#06b6d4"/>
-          {metrics.notes&&<div style={{fontSize:11,color:'rgba(255,255,255,0.4)',textAlign:'center',lineHeight:1.5,padding:'0 4px'}}>{metrics.notes}</div>}
+          {metrics.notes&&<div style={{fontSize:12,color:'rgba(255,255,255,0.5)',textAlign:'center',lineHeight:1.6,padding:'0 4px'}}>{metrics.notes}</div>}
         </div>
       </div>
     </div>
