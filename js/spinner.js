@@ -85,8 +85,8 @@ export class SpinnerWheel {
       const targetIndex = Math.floor(Math.random() * total);
       this.selectedIndex = targetIndex;
 
-      // Calculate position: go through 2-3 full cycles + land on target
-      const extraCycles = 2 + Math.floor(Math.random() * 2);
+      // Calculate position: go through 1-2 full cycles + land on target
+      const extraCycles = 1 + Math.floor(Math.random() * 2);
       const middleOffset = total * ITEM_HEIGHT;
       const spinDistance = extraCycles * total * ITEM_HEIGHT;
       const targetY = -(middleOffset + targetIndex * ITEM_HEIGHT + spinDistance) + (VIEWPORT_HEIGHT / 2 - ITEM_HEIGHT / 2);
@@ -104,6 +104,15 @@ export class SpinnerWheel {
         this._setPositionToIndex(targetIndex, false);
         this._dispatchChange();
         resolve(this.options[targetIndex]);
+
+        // Landing flash on the pointer bar
+        const pointer = this.containerEl.querySelector('.wheel-pointer');
+        if (pointer) {
+          pointer.classList.remove('landing');
+          void pointer.offsetWidth; // reflow to restart animation
+          pointer.classList.add('landing');
+          pointer.addEventListener('animationend', () => pointer.classList.remove('landing'), { once: true });
+        }
       };
 
       this.strip.addEventListener('transitionend', onEnd);
