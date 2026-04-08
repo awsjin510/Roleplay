@@ -119,6 +119,14 @@ export class SpinnerWheel {
     });
   }
 
+  step(dir) {
+    if (this.spinning) return;
+    const total = this.options.length;
+    this.selectedIndex = ((this.selectedIndex + dir) % total + total) % total;
+    this._setPositionToIndex(this.selectedIndex, true);
+    this._dispatchChange();
+  }
+
   getSelected() {
     return this.options[this.selectedIndex];
   }

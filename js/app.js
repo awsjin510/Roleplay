@@ -102,6 +102,15 @@ document.getElementById('spin-all').addEventListener('click', async () => {
   });
 });
 
+// Nav buttons (▲▼)
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.wheel;
+    const dir = parseInt(btn.dataset.dir, 10);
+    if (wheels[key]) wheels[key].step(dir);
+  });
+});
+
 // Individual spin buttons
 document.querySelectorAll('.spin-btn').forEach(btn => {
   btn.addEventListener('click', () => {
