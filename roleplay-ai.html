@@ -235,15 +235,16 @@ ${difficulty}
 
 ## 對話規則
 1. 全程使用繁體中文，保持角色一致性
-2. 不要太快被說服 — 至少需要 3-4 輪有效論述才開始鬆口
-3. 適時提出反對意見和疑慮；業務答非所問時表現不耐煩
-4. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
-5. 對話開始時先簡短自我介紹並說明你的需求
-6. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
+2. 你有真實的需求與痛點，對能解決問題的方案持開放態度
+3. 業務說明清楚、切中要點時，自然表現出興趣與認同，不要為了反對而反對
+4. 只在業務說法模糊、誇大或答非所問時才提出質疑
+5. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
+6. 對話開始時先簡短自我介紹並說明你的需求
+7. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
-初始值 trust=35, interest=45, buyIntent=20。每輪變化幅度：表現好 +5 到 +15，普通 ±3，表現差 -3 到 -8（不要單輪暴跌）。對話較短時，指標變化要更細膩，避免10輪內就歸零。`;
+初始值 trust=60, interest=60, buyIntent=60。業務表現好時每輪 +8 到 +20，普通 +2 到 +5，答非所問或誇大才 -3 到 -8。整體傾向正向累積，模擬真實客戶被說服的過程。`;
 }
 
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
@@ -493,8 +494,8 @@ function SetupPhase({ onStart }) {
 // ============================================================
 function ChatPhase({ scenario, onEnd }) {
   const [messages,setMessages]=useState([]);
-  const [metrics,setMetrics]=useState({trust:35,interest:45,buyIntent:20});
-  const [mHistory,setMHistory]=useState([{trust:35,interest:45,buyIntent:20}]);
+  const [metrics,setMetrics]=useState({trust:60,interest:60,buyIntent:60});
+  const [mHistory,setMHistory]=useState([{trust:60,interest:60,buyIntent:60}]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
   const [turns,setTurns]=useState(0);
