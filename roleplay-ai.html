@@ -18,6 +18,7 @@
     @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
     @keyframes spin { to { transform:rotate(360deg); } }
     @keyframes pulse { 0%,100% { box-shadow:0 0 20px rgba(99,102,241,0.4); } 50% { box-shadow:0 0 40px rgba(99,102,241,0.7); } }
+    @keyframes micPulse { 0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow:0 0 0 6px rgba(239,68,68,0); } }
     #root { min-height: 100vh; }
   </style>
 </head>
@@ -501,9 +502,11 @@ function ChatPhase({ scenario, onEnd }) {
   const [turns,setTurns]=useState(0);
   const [toast,setToast]=useState(null);
   const [timeLeft,setTimeLeft]=useState(null);
+  const [speaking,setSpeaking]=useState(false);
   const timerRef=useRef(null);
   const sendRef=useRef(null);
   const endRef=useRef(null);
+  const recognitionRef=useRef(null);
   const apiMsgs=useRef([{role:'user',content:'（場景開始：業務人員剛走進你的辦公室，請你先開口說話）'}]);
   const sys=useRef(buildSystemPrompt(scenario));
 
@@ -545,8 +548,38 @@ function ChatPhase({ scenario, onEnd }) {
 
   useEffect(()=>endRef.current?.scrollIntoView({behavior:'smooth'}),[messages,loading]);
 
+  const toggleVoice=()=>{
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){ alert('你的瀏覽器不支援語音輸入，請使用 Chrome'); return; }
+    if(speaking){
+      recognitionRef.current?.stop();
+      setSpeaking(false);
+      return;
+    }
+    const rec=new SR();
+    rec.lang='zh-TW';
+    rec.continuous=true;
+    rec.interimResults=true;
+    recognitionRef.current=rec;
+    rec.onstart=()=>setSpeaking(true);
+    rec.onend=()=>setSpeaking(false);
+    rec.onerror=()=>setSpeaking(false);
+    rec.onresult=(e)=>{
+      let interim='';
+      let final='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) final+=e.results[i][0].transcript;
+        else interim+=e.results[i][0].transcript;
+      }
+      if(final) setInput(prev=>(prev+final).trimStart());
+    };
+    rec.start();
+  };
+
   const send=async()=>{
     if(!input.trim()||loading) return;
+    recognitionRef.current?.stop();
+    setSpeaking(false);
     clearInterval(timerRef.current);
     setTimeLeft(null);
     const txt=input.trim(); setInput('');
@@ -628,6 +661,10 @@ function ChatPhase({ scenario, onEnd }) {
               placeholder={`輸入 ${scenario.業務} 的回應... (Enter 發送，Shift+Enter 換行)`} disabled={loading}
               rows={3}
               style={{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:'12px 16px',color:'white',fontSize:15,outline:'none',resize:'none',lineHeight:1.5,fontFamily:'inherit'}}/>
+            <button onClick={toggleVoice} disabled={loading} title={speaking?'停止錄音':'語音輸入'}
+              style={{padding:'12px 14px',background:speaking?'rgba(239,68,68,0.25)':'rgba(255,255,255,0.07)',border:`1px solid ${speaking?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)'}`,borderRadius:10,color:speaking?'#f87171':'rgba(255,255,255,0.7)',fontSize:20,cursor:loading?'not-allowed':'pointer',flexShrink:0,lineHeight:1,animation:speaking?'micPulse 1s ease-in-out infinite':undefined}}>
+              {speaking?'⏹':'🎙'}
+            </button>
             <button onClick={send} disabled={loading||!input.trim()} style={{padding:'12px 20px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:600,fontSize:15,cursor:loading||!input.trim()?'not-allowed':'pointer',opacity:loading||!input.trim()?0.45:1,flexShrink:0}}>發送</button>
           </div>
           <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',padding:'8px 14px',display:'flex',gap:10,flexShrink:0}}>
