@@ -500,9 +500,37 @@ function ChatPhase({ scenario, onEnd }) {
   const [loading,setLoading]=useState(false);
   const [turns,setTurns]=useState(0);
   const [toast,setToast]=useState(null);
+  const [timeLeft,setTimeLeft]=useState(null);
+  const timerRef=useRef(null);
+  const sendRef=useRef(null);
   const endRef=useRef(null);
   const apiMsgs=useRef([{role:'user',content:'（場景開始：業務人員剛走進你的辦公室，請你先開口說話）'}]);
   const sys=useRef(buildSystemPrompt(scenario));
+
+  // 計時器：AI 回覆完畢後啟動，使用者送出後停止
+  useEffect(()=>{
+    if(!loading && messages.length>0){
+      setTimeLeft(60);
+      clearInterval(timerRef.current);
+      timerRef.current=setInterval(()=>{
+        setTimeLeft(t=>{
+          if(t<=1){
+            clearInterval(timerRef.current);
+            // 時間到：有文字就自動送出，沒有就提示
+            if(sendRef.current) sendRef.current();
+            else setToast('⏰ 時間到！請盡快回應');
+            return 0;
+          }
+          return t-1;
+        });
+      },1000);
+    }
+    if(loading){
+      clearInterval(timerRef.current);
+      setTimeLeft(null);
+    }
+    return ()=>clearInterval(timerRef.current);
+  },[loading,messages.length]);
 
   useEffect(()=>{
     (async()=>{
@@ -519,6 +547,8 @@ function ChatPhase({ scenario, onEnd }) {
 
   const send=async()=>{
     if(!input.trim()||loading) return;
+    clearInterval(timerRef.current);
+    setTimeLeft(null);
     const txt=input.trim(); setInput('');
     setMessages(p=>[...p,{role:'user',content:txt}]);
     apiMsgs.current.push({role:'user',content:txt});
@@ -529,6 +559,7 @@ function ChatPhase({ scenario, onEnd }) {
     if(r.metrics){setMetrics(r.metrics);setMHistory(p=>[...p,r.metrics]);}
     setLoading(false);
   };
+  useEffect(()=>{ sendRef.current=input.trim()?send:null; },[input,loading]);
 
   const hint=()=>{setToast(HINTS[Math.floor(Math.random()*HINTS.length)]);setTimeout(()=>setToast(null),3500);};
   const end=()=>onEnd(scenario,messages.map(m=>`${m.role==='user'?'業務':'客戶'}: ${m.content}`).join('\n\n'),mHistory);
@@ -551,6 +582,18 @@ function ChatPhase({ scenario, onEnd }) {
             第 {turns} 輪
           </span>
           {loading&&<span style={{fontSize:13,color:'rgba(255,255,255,0.4)'}}>AI 回覆中...</span>}
+          {!loading&&timeLeft!==null&&(
+            <span style={{
+              display:'flex',alignItems:'center',gap:5,
+              background:timeLeft<=10?'rgba(239,68,68,0.15)':timeLeft<=30?'rgba(245,158,11,0.15)':'rgba(34,197,94,0.12)',
+              border:`1px solid ${timeLeft<=10?'rgba(239,68,68,0.4)':timeLeft<=30?'rgba(245,158,11,0.35)':'rgba(34,197,94,0.3)'}`,
+              borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:700,
+              color:timeLeft<=10?'#fca5a5':timeLeft<=30?'#fcd34d':'#86efac',
+              animation:timeLeft<=10?'pulse 0.8s ease-in-out infinite':'none',
+            }}>
+              ⏱ {timeLeft}s
+            </span>
+          )}
         </div>
       </div>
 
