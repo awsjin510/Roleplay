@@ -622,12 +622,13 @@ function ChatPhase({ scenario, onEnd }) {
             <div ref={endRef}/>
           </div>
 
-          <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'12px 14px',display:'flex',gap:10,flexShrink:0}}>
-            <input value={input} onChange={e=>setInput(e.target.value)}
-              onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()}
-              placeholder={`輸入 ${scenario.業務} 的回應...`} disabled={loading}
-              style={{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:'12px 16px',color:'white',fontSize:15,outline:'none'}}/>
-            <button onClick={send} disabled={loading||!input.trim()} style={{padding:'12px 20px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:600,fontSize:15,cursor:loading||!input.trim()?'not-allowed':'pointer',opacity:loading||!input.trim()?0.45:1}}>發送</button>
+          <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'12px 14px',display:'flex',gap:10,flexShrink:0,alignItems:'flex-end'}}>
+            <textarea value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
+              placeholder={`輸入 ${scenario.業務} 的回應... (Enter 發送，Shift+Enter 換行)`} disabled={loading}
+              rows={3}
+              style={{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:'12px 16px',color:'white',fontSize:15,outline:'none',resize:'none',lineHeight:1.5,fontFamily:'inherit'}}/>
+            <button onClick={send} disabled={loading||!input.trim()} style={{padding:'12px 20px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:600,fontSize:15,cursor:loading||!input.trim()?'not-allowed':'pointer',opacity:loading||!input.trim()?0.45:1,flexShrink:0}}>發送</button>
           </div>
           <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',padding:'8px 14px',display:'flex',gap:10,flexShrink:0}}>
             <button onClick={hint} style={{padding:'8px 16px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.7)',fontSize:14,cursor:'pointer'}}>💡 提示</button>
