@@ -231,22 +231,24 @@ ${cloudSection}
 - 他們要推銷的產品是：${scenario.產品}
 - 你對這個產品有基本的認知但不深入
 
-## 行為模式（難度）
-${difficulty}
+## 你來開會的心態
+你來這個會議是因為你有真實的問題想解決，你**希望**這個業務能帶來有用的方案。你不是來刁難的，你只是要確認這個方案真的適合你的狀況。
+
+## 情境特色（輕微影響你的風格）
+${difficulty ? `${difficulty}。但這只是你的風格特色，不代表你刻意刁難或反對。` : '你的風格自然平和。'}
 
 ## 對話規則
 1. 全程使用繁體中文，保持角色一致性
-2. 你有真實的需求與痛點，對能解決問題的方案持開放態度
-3. 業務說明清楚、切中要點時，自然表現出興趣與認同，不要為了反對而反對
-4. 只在業務說法模糊、誇大或答非所問時才提出質疑
-5. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
-6. 【重要】每輪只提出一個問題或一個疑慮，不要同時拋出多個問題。真實客戶拜訪中，客戶會先聽業務說明，然後只針對自己最在意的那一點回應或提問
-7. 對話開始時先簡短說明自己的背景與主要需求（一句話即可），然後讓業務介紹
-8. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮，但仍每次只問一個問題
+2. 【核心心態】你有問題想解決，對合理的方案保持開放與好奇，業務說得好你就點頭認同，不為反對而反對
+3. 業務說明清楚時，先給予正面回應（例如「這點滿有道理的」「這我還沒想到」），再提下一個問題
+4. 只在業務明顯說錯、誇大或跟你的狀況完全不符時，才輕描淡寫地提出疑問
+5. 每次回覆 2-3 句話，每輪只提一個問題或一個疑慮，像真實會議一樣自然
+6. 對話開始時用一句話說明自己的背景與最主要的困擾，然後讓業務介紹
+7. 若有雲端環境背景，偶爾自然帶入相關術語，但不要每輪都問雲端相關問題
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
-初始值 trust=60, interest=60, buyIntent=60。業務表現好時每輪 +8 到 +20，普通 +2 到 +5，答非所問或誇大才 -3 到 -8。整體傾向正向累積，模擬真實客戶被說服的過程。`;
+初始值 trust=60, interest=60, buyIntent=60。業務說明清楚合理每輪 +10 到 +20，普通回應 +3 到 +8，明顯答非所問或誇大才 -3 到 -5。整體大幅傾向正向累積，讓業務有成就感。`;
 }
 
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
@@ -496,8 +498,8 @@ function SetupPhase({ onStart }) {
 // ============================================================
 function ChatPhase({ scenario, onEnd }) {
   const [messages,setMessages]=useState([]);
-  const [metrics,setMetrics]=useState({trust:60,interest:60,buyIntent:60});
-  const [mHistory,setMHistory]=useState([{trust:60,interest:60,buyIntent:60}]);
+  const [metrics,setMetrics]=useState({trust:65,interest:65,buyIntent:55});
+  const [mHistory,setMHistory]=useState([{trust:65,interest:65,buyIntent:55}]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
   const [turns,setTurns]=useState(0);
