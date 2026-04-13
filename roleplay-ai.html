@@ -47,17 +47,17 @@ const ALL_CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
   總機: { techLevel:"無", decisionPower:"無，只負責轉接電話", personality:"禮貌但防衛性高，習慣婉拒陌生來電", concerns:"不想惹麻煩、不想被主管責怪接了推銷電話" },
-  行政助理: { techLevel:"低", decisionPower:"無，需要轉達上級", personality:"友善但不懂技術，會問很基本的問題", concerns:"怕麻煩、怕選錯被罵" },
-  IT窗口: { techLevel:"中", decisionPower:"建議權，需主管核准", personality:"務實，關注實際操作面", concerns:"維護工作量、與現有系統相容性" },
-  MIS工程師: { techLevel:"高", decisionPower:"技術評估權，預算需上報", personality:"會問深入技術問題，對誇大宣傳反感", concerns:"技術規格、SLA、整合難度" },
-  IT主管: { techLevel:"中高", decisionPower:"有預算裁量權", personality:"注重 ROI 和管理效率", concerns:"人力配置、總擁有成本、廠商穩定度" },
-  "資訊長(CIO)": { techLevel:"策略層", decisionPower:"最終決策者", personality:"時間寶貴，只看重點和策略價值", concerns:"企業策略對齊、風險管控、數位轉型藍圖" },
-  採購: { techLevel:"低", decisionPower:"採購流程執行者，需技術部門認可", personality:"關注合約條款、付款方式、價格談判", concerns:"價格、交期、售後保固、合規文件" },
-  PM專案經理: { techLevel:"中", decisionPower:"專案預算決策，需IT配合", personality:"以交付時程為優先，重視專案風險", concerns:"導入時間、廠商配合度、不影響現有專案" },
-  技術主管: { techLevel:"很高", decisionPower:"技術架構決策者，向CIO報告", personality:"非常注重技術細節，會測試你的技術深度", concerns:"架構設計、擴充性、團隊學習曲線" },
-  部門主管: { techLevel:"低", decisionPower:"部門預算決策者", personality:"只關心業務影響，不懂技術細節", concerns:"能否解決業務痛點、不影響業務運作" },
-  老闆: { techLevel:"低到中", decisionPower:"公司最高決策者", personality:"時間極度有限，只看大局和數字", concerns:"ROI、競爭優勢、公司形象、不踩雷" },
-  營運主管: { techLevel:"中", decisionPower:"營運預算決策者", personality:"關注系統穩定性和效率，怕停機", concerns:"SLA保證、停機損失、維護成本、人員培訓" },
+  行政助理: { techLevel:"低", decisionPower:"無，需要轉達上級", personality:"友善但不懂技術，偶爾問一個基本問題確認", concerns:"怕麻煩、怕選錯被罵" },
+  IT窗口: { techLevel:"中", decisionPower:"建議權，需主管核准", personality:"務實，聽完先回應一個最在意的操作面問題", concerns:"維護工作量、與現有系統相容性" },
+  MIS工程師: { techLevel:"高", decisionPower:"技術評估權，預算需上報", personality:"技術導向，每次只針對一個最關鍵的技術點確認，對誇大宣傳反感", concerns:"技術規格、SLA、整合難度" },
+  IT主管: { techLevel:"中高", decisionPower:"有預算裁量權", personality:"注重 ROI 和管理效率，每次只問最重要的一個問題", concerns:"人力配置、總擁有成本、廠商穩定度" },
+  "資訊長(CIO)": { techLevel:"策略層", decisionPower:"最終決策者", personality:"時間寶貴，每次只問一個最關鍵的策略問題，不會同時拋出多個疑問", concerns:"企業策略對齊、風險管控、數位轉型藍圖" },
+  採購: { techLevel:"低", decisionPower:"採購流程執行者，需技術部門認可", personality:"聚焦在採購條件，每次確認一個合約或價格問題", concerns:"價格、交期、售後保固、合規文件" },
+  PM專案經理: { techLevel:"中", decisionPower:"專案預算決策，需IT配合", personality:"以交付時程為優先，每次確認一個導入落地的問題", concerns:"導入時間、廠商配合度、不影響現有專案" },
+  技術主管: { techLevel:"很高", decisionPower:"技術架構決策者，向CIO報告", personality:"注重技術細節，每次只針對一個架構或安全疑點深入追問", concerns:"架構設計、擴充性、團隊學習曲線" },
+  部門主管: { techLevel:"低", decisionPower:"部門預算決策者", personality:"只關心業務影響，每次問一個和自己部門直接相關的問題", concerns:"能否解決業務痛點、不影響業務運作" },
+  老闆: { techLevel:"低到中", decisionPower:"公司最高決策者", personality:"時間極度有限，只問最核心的一個商業問題，不喜歡技術細節", concerns:"ROI、競爭優勢、公司形象、不踩雷" },
+  營運主管: { techLevel:"中", decisionPower:"營運預算決策者", personality:"關注系統穩定性和效率，每次確認一個運營層面的疑慮", concerns:"SLA保證、停機損失、維護成本、人員培訓" },
 };
 const industryProfiles = {
   遊戲產業: { budget:"兩極化（大廠充裕，獨立工作室有限）", painPoints:"DDoS防護、玩家數據安全、高可用性", culture:"技術導向、重視用戶體驗" },
@@ -113,9 +113,9 @@ const difficultyBehaviors = {
   客戶不耐煩: "語氣急促，對重複或模糊的回答明顯不耐，會嘆氣或打斷",
   客戶一直打斷: "業務還沒說完就插話提問，讓你很難完整說明一個論點",
   客戶只願意給5分鐘: "一開始就說只有5分鐘，之後不斷催促，說時間快到了",
-  客戶非常懂技術: "問非常深入的技術問題（頻寬、延遲、加密標準），對誇大或模糊說法立即反駁",
+  客戶非常懂技術: "每次只針對一個技術細節深入追問（例如頻寬、延遲或加密標準擇一），對誇大說法輕描淡寫地反駁，不會一次列出一堆技術問題",
   客戶只談價格: "每次回應都要提到價格或預算限制，不斷要求降價或比價",
-  客戶不信任新供應商: "反覆質疑你們公司的規模、經驗、客戶案例，問很多信任驗證的問題",
+  客戶不信任新供應商: "每次提出一個信任驗證問題（例如規模、案例或經驗擇一），讓業務有機會逐一回應",
   客戶認為現在系統很好: "不斷強調現有方案運作正常，質疑為何要改變，需要很強的理由才會動搖",
   客戶一直提競品: "持續拿競品來比較，問你們跟競品廠商比有什麼優勢",
   客戶要求立刻報價: "急著要報價單，不想花時間聽產品介紹，催促快點給數字",
@@ -240,8 +240,9 @@ ${difficulty}
 3. 業務說明清楚、切中要點時，自然表現出興趣與認同，不要為了反對而反對
 4. 只在業務說法模糊、誇大或答非所問時才提出質疑
 5. 每次回覆控制在 2-4 句話，像真實對話一樣簡潔
-6. 對話開始時先簡短自我介紹並說明你的需求
-7. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
+6. 【重要】每輪只提出一個問題或一個疑慮，不要同時拋出多個問題。真實客戶拜訪中，客戶會先聽業務說明，然後只針對自己最在意的那一點回應或提問
+7. 對話開始時先簡短說明自己的背景與主要需求（一句話即可），然後讓業務介紹
+8. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮，但仍每次只問一個問題
 
 ## 隱藏指標
 每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
