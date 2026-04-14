@@ -42,8 +42,9 @@ const SLOT_DATA = {
   情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
   難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
   雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
+  資安項目: { icon: "🔒", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellis DLP"] },
 };
-const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境');
+const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境' && c !== '資安項目');
 const ALL_CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
@@ -261,6 +262,7 @@ function buildSystemPrompt(scenario) {
   const difficulty = difficultyBehaviors[scenario.難度] || '';
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
   const cloudNote = cloudEnv ? `你目前使用 ${scenario.雲端環境}，偶爾可以自然帶到相關經驗，但不要每輪都問雲端問題。` : '';
+  const secNote = scenario.資安項目 ? `業務這次要介紹的具體產品是「${scenario.資安項目}」，請對這個產品有基本認知，可以問一個與它相關的實際問題。` : '';
   return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
@@ -274,7 +276,7 @@ function buildSystemPrompt(scenario) {
 - 目前狀況：${scenario.情境}
 - 你最在意的事：${role.concerns}
 - 產業背景：${industry.painPoints}
-${cloudNote}
+${cloudNote}${secNote}
 
 你的開會心態：
 你是來找解決方案的，不是來刁難的。你希望業務帶來有用的資訊。如果業務說得合理，你會點頭認同並問下一個你最好奇的問題。只有業務明顯說錯或誇大時，才輕描淡寫地質疑一句。
@@ -468,13 +470,21 @@ function SetupPhase({ onStart }) {
   const [triggers, setTriggers] = useState(()=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0])));
 
   const isCloudProduct = selections.產品 === '雲端服務';
-  const requiredCats = isCloudProduct ? [...BASE_CATEGORIES, '雲端環境'] : BASE_CATEGORIES;
+  const isSecurityProduct = selections.產品 === '資安產品';
+  const requiredCats = [
+    ...BASE_CATEGORIES,
+    ...(isCloudProduct ? ['雲端環境'] : []),
+    ...(isSecurityProduct ? ['資安項目'] : []),
+  ];
   const allSpun = requiredCats.every(c => selections[c] !== undefined);
 
   const handleDone = useCallback((cat, val) => {
     setSelections(p => {
       const next = {...p, [cat]: val};
-      if (cat === '產品' && val !== '雲端服務') delete next['雲端環境'];
+      if (cat === '產品') {
+        if (val !== '雲端服務') delete next['雲端環境'];
+        if (val !== '資安產品') delete next['資安項目'];
+      }
       return next;
     });
   }, []);
@@ -504,6 +514,20 @@ function SetupPhase({ onStart }) {
           <div style={{display:'flex',justifyContent:'center'}}>
             <div style={{width:160}}>
               <SlotColumn key="雲端環境" category="雲端環境" data={SLOT_DATA['雲端環境']} onSpinComplete={handleDone} spinTrigger={triggers['雲端環境']}/>
+            </div>
+          </div>
+        </div>
+      )}
+      {isSecurityProduct&&(
+        <div style={{animation:'fadeInUp 0.35s ease'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(239,68,68,0.4))'}}/>
+            <span style={{color:'#fca5a5',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>🔒 資安項目（產品為資安產品時啟用）</span>
+            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(239,68,68,0.4),transparent)'}}/>
+          </div>
+          <div style={{display:'flex',justifyContent:'center'}}>
+            <div style={{width:200}}>
+              <SlotColumn key="資安項目" category="資安項目" data={SLOT_DATA['資安項目']} onSpinComplete={handleDone} spinTrigger={triggers['資安項目']}/>
             </div>
           </div>
         </div>
