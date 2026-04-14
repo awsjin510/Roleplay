@@ -42,7 +42,7 @@ const SLOT_DATA = {
   情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
   難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
   雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
-  資安項目: { icon: "🔒", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellis DLP"] },
+  資安項目: { icon: "🔒", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"] },
 };
 const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境' && c !== '資安項目');
 const ALL_CATEGORIES = Object.keys(SLOT_DATA);
@@ -108,6 +108,63 @@ const cloudEnvProfiles = {
     concerns: "多環境管理複雜、資安政策難以統一、運維成本雙倍",
     attitude: "想統一管理但不確定方向，對能簡化複雜度的方案有興趣",
     keywords: "統一管理介面、網路互通、安全策略一致性、成本可視化",
+  },
+};
+const securityProductProfiles = {
+  'appGuard': {
+    category: '端點安全 / 惡意程式防護',
+    description: '以零信任架構在 OS kernel 層攔截惡意程式行為，完全不依賴病毒碼偵測，即使面對全新 zero-day 也能有效防護。',
+    keyPoints: '不需更新病毒碼、效能消耗比競品低 10-200 倍、可與現有資安工具並存',
+  },
+  'Ciro': {
+    category: '資安監控與風險管理',
+    description: '資安監控與風險可視化平台，協助企業即時掌握內外部威脅狀態。',
+    keyPoints: '統一風險視圖、即時告警、符合法規稽核需求',
+  },
+  'Akamai API Security': {
+    category: 'API 安全防護',
+    description: '全生命週期 API 防護方案，提供 API 自動探索、姿態管理、即時威脅偵測與 CI/CD 整合測試。',
+    keyPoints: '自動盤點所有 API 資產、ML 驅動的異常行為偵測、150+ 安全測試案例整合進 DevSecOps 流程',
+  },
+  'OKTA': {
+    category: '身份與存取管理（IAM）',
+    description: '雲端身份管理平台，提供單一登入（SSO）、多因素驗證（MFA）與使用者生命週期管理，整合 7,000+ 應用程式。',
+    keyPoints: '統一身份驗證政策、降低帳密外洩風險、Forrester 驗證 ROI 達 211%',
+  },
+  'CyberArk': {
+    category: '特權存取管理（PAM）',
+    description: '專注保護企業最高風險的特權帳號，將憑證集中加密保管，並實施 just-in-time 存取，防止橫向移動攻擊。',
+    keyPoints: '特權憑證集中保管、自動密碼輪換、即時存取授權不留常態後門',
+  },
+  'Aware': {
+    category: '生物辨識身份驗證',
+    description: '提供人臉辨識、聲紋辨識與活體偵測的生物辨識 MFA 平台，可整合為無密碼驗證方案。',
+    keyPoints: '活體偵測降低 50% 誤判、辨識速度不到 1 秒、提供 SDK/API 快速整合',
+  },
+  'Bitsight': {
+    category: '資安評級 / 供應鏈風險管理',
+    description: '利用 120+ 外部資料來源持續評量企業資安姿態，評分 250-900，協助量化自身與第三方供應商的資安風險。',
+    keyPoints: '無需安裝代理程式即可評估外部風險、評分低於 400 的企業被駭機率高 5 倍、廣泛用於供應商盡職調查',
+  },
+  'Cyble': {
+    category: '威脅情報（Threat Intelligence）',
+    description: 'AI 驅動的威脅情報平台，全面監控表層、深層及暗網，提前預警數據外洩、漏洞與威脅行為者動態。',
+    keyPoints: 'AI 優先排序威脅情報、深偽（Deepfake）偵測與下架服務、沙箱惡意程式分析',
+  },
+  'Fortify': {
+    category: '應用程式安全測試（AST）',
+    description: 'OpenText 旗下的應用程式安全測試套件，涵蓋靜態（SAST）、動態（DAST）與互動式分析，支援 44+ 程式語言。',
+    keyPoints: '1,524+ 漏洞分類、無縫整合 CI/CD 流程、自動建議程式碼修復方案',
+  },
+  'Security Scorecard': {
+    category: '第三方風險管理 / 資安評級',
+    description: '持續監控供應商與內部資安姿態的評級平台，以 AI 自動化治理，被 25,000+ 企業用於第三方風險管理。',
+    keyPoints: '預測駭客入侵準確率高 13.8 倍、TITAN AI 統一治理與自動化、適用合規稽核與董事會報告',
+  },
+  'Trellix DLP': {
+    category: '資料外洩防護（DLP）',
+    description: 'Trellix 旗下資料外洩防護方案（前身 McAfee Enterprise），在端點、網路、雲端應用與郵件多管道即時攔截敏感資料外洩。',
+    keyPoints: '支援 400+ 檔案格式、OCR 辨識圖片與 PDF 中的敏感資料、覆蓋端點/郵件/網路/雲端全管道',
   },
 };
 const difficultyBehaviors = {
@@ -262,7 +319,8 @@ function buildSystemPrompt(scenario) {
   const difficulty = difficultyBehaviors[scenario.難度] || '';
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
   const cloudNote = cloudEnv ? `你目前使用 ${scenario.雲端環境}，偶爾可以自然帶到相關經驗，但不要每輪都問雲端問題。` : '';
-  const secNote = scenario.資安項目 ? `業務這次要介紹的具體產品是「${scenario.資安項目}」，請對這個產品有基本認知，可以問一個與它相關的實際問題。` : '';
+  const secProd = securityProductProfiles[scenario.資安項目];
+  const secNote = secProd ? `業務這次介紹的具體產品是「${scenario.資安項目}」（${secProd.category}）。你對它的基本認知：${secProd.description} 你可能在意的點：${secProd.keyPoints}。` : '';
   return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
