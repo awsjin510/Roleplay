@@ -641,8 +641,8 @@ function ChatPhase({ scenario, onEnd }) {
 
           <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'12px 14px',display:'flex',gap:10,flexShrink:0,alignItems:'flex-end'}}>
             <textarea value={input} onChange={e=>setInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
-              placeholder={`輸入 ${scenario.業務} 的回應... (Enter 發送，Shift+Enter 換行)`} disabled={loading}
+              onKeyDown={e=>{}}
+              placeholder={`輸入 ${scenario.業務} 的回應... (點擊右下角「發送」送出)`} disabled={loading}
               rows={3}
               style={{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:'12px 16px',color:'white',fontSize:15,outline:'none',resize:'none',lineHeight:1.5,fontFamily:'inherit'}}/>
             <button onClick={toggleVoice} disabled={loading} title={speaking?'停止錄音':'語音輸入'}
