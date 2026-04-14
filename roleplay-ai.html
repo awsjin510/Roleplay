@@ -149,6 +149,18 @@ function getApiKey() { return localStorage.getItem('anthropic_api_key') || ''; }
 function saveApiKey(k) { localStorage.setItem('anthropic_api_key', k.trim()); }
 function clearApiKey() { localStorage.removeItem('anthropic_api_key'); }
 
+const HISTORY_KEY = 'roleplay_history';
+function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); } catch{ return []; } }
+function saveHistory(record) {
+  const list = getHistory();
+  list.unshift(record);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 100)));
+}
+function deleteHistory(id) {
+  const list = getHistory().filter(r=>r.id!==id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+}
+
 function ApiKeyModal({ onSaved }) {
   const [val, setVal] = useState('');
   const [err, setErr] = useState('');
@@ -682,7 +694,23 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
         // 用深度追蹤正確擷取最外層 JSON 物件
         const extractJSON=(s)=>{const i=s.indexOf('{');if(i<0)return null;let d=0;for(let j=i;j<s.length;j++){if(s[j]==='{')d++;else if(s[j]==='}'){d--;if(d===0)return s.slice(i,j+1);}}return null;};
         const jsonStr=extractJSON(r.text);
-        if(jsonStr) setReview(JSON.parse(jsonStr)); else setReview({error:true});
+        if(jsonStr){
+          const parsed=JSON.parse(jsonStr);
+          setReview(parsed);
+          saveHistory({
+            id: Date.now().toString(),
+            date: new Date().toISOString(),
+            scenario,
+            turns: mHistory.length-1,
+            score: parsed.overallScore||0,
+            grade: parsed.grade||'B',
+            summary: parsed.summary||'',
+            strengths: parsed.strengths||[],
+            improvements: parsed.improvements||[],
+            coachAdvice: parsed.coachAdvice||'',
+            finalMetrics: mHistory[mHistory.length-1]||{trust:65,interest:65,buyIntent:55},
+          });
+        } else setReview({error:true});
       }
       catch{ setReview({error:true}); }
       setLoading(false);
@@ -767,6 +795,113 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
 }
 
 // ============================================================
+// HISTORY MODAL
+// ============================================================
+function HistoryModal({ onClose }) {
+  const [list, setList] = useState(getHistory);
+  const [expanded, setExpanded] = useState(null);
+  const gc = {S:'#ffd700',A:'#6366f1',B:'#22c55e',C:'#f59e0b',D:'#ef4444'};
+
+  const remove = (id) => {
+    deleteHistory(id);
+    setList(getHistory());
+    if(expanded===id) setExpanded(null);
+  };
+
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
+      <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.25)',borderRadius:20,width:'100%',maxWidth:640,padding:24,boxShadow:'0 0 60px rgba(99,102,241,0.15)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800}}>📋 練習記錄</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+        </div>
+
+        {list.length===0 ? (
+          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>
+            還沒有練習記錄，完成第一次覆盤後會自動儲存。
+          </div>
+        ) : list.map(r => {
+          const color = gc[r.grade]||'#6366f1';
+          const isOpen = expanded===r.id;
+          return (
+            <div key={r.id} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${isOpen?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)'}`,borderRadius:14,marginBottom:10,overflow:'hidden',transition:'border-color 0.2s'}}>
+              {/* Header row */}
+              <div onClick={()=>setExpanded(isOpen?null:r.id)}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',cursor:'pointer'}}>
+                {/* Score circle */}
+                <div style={{flexShrink:0,width:44,height:44,position:'relative'}}>
+                  <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
+                    <circle cx={22} cy={22} r={18} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={4}/>
+                    <circle cx={22} cy={22} r={18} fill="none" stroke={color} strokeWidth={4}
+                      strokeDasharray={`${2*Math.PI*18}`} strokeDashoffset={`${2*Math.PI*18*(1-r.score/100)}`} strokeLinecap="round"/>
+                  </svg>
+                  <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color}}>{r.score}</div>
+                </div>
+                {/* Info */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,flexWrap:'wrap'}}>
+                    <span style={{fontSize:13,fontWeight:700,color}}>{r.grade} 等級</span>
+                    <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>{fmt(r.date)}</span>
+                    <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>· {r.turns} 輪</span>
+                  </div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                    {[r.scenario?.業務, r.scenario?.產品, r.scenario?.產業, r.scenario?.角色].filter(Boolean).map(t=>(
+                      <span key={t} style={{fontSize:10,padding:'2px 7px',background:'rgba(255,255,255,0.07)',borderRadius:20,color:'rgba(255,255,255,0.55)'}}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+                <span style={{color:'rgba(255,255,255,0.3)',fontSize:13,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
+              </div>
+
+              {/* Expanded detail */}
+              {isOpen && (
+                <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                  {r.summary && <p style={{margin:0,fontSize:13,color:'rgba(255,255,255,0.65)',lineHeight:1.6}}>{r.summary}</p>}
+
+                  <div style={{display:'flex',gap:10}}>
+                    {[['信任度',r.finalMetrics?.trust,'#6366f1'],['興趣度',r.finalMetrics?.interest,'#a855f7'],['購買意願',r.finalMetrics?.buyIntent,'#06b6d4']].map(([l,v,c])=>(
+                      <div key={l} style={{flex:1,background:'rgba(255,255,255,0.04)',borderRadius:10,padding:'8px 10px',textAlign:'center'}}>
+                        <div style={{fontSize:18,fontWeight:800,color:c}}>{v}</div>
+                        <div style={{fontSize:10,color:'rgba(255,255,255,0.4)',marginTop:2}}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {r.strengths?.length>0 && (
+                    <div>
+                      <div style={{fontSize:12,color:'#22c55e',fontWeight:600,marginBottom:5}}>✅ 做得好</div>
+                      {r.strengths.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}
+                    </div>
+                  )}
+                  {r.improvements?.length>0 && (
+                    <div>
+                      <div style={{fontSize:12,color:'#f59e0b',fontWeight:600,marginBottom:5}}>⚠️ 可改進</div>
+                      {r.improvements.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}
+                    </div>
+                  )}
+                  {r.coachAdvice && (
+                    <div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.15)',borderRadius:10,padding:'10px 12px'}}>
+                      <div style={{fontSize:12,color:'#22d3ee',fontWeight:600,marginBottom:4}}>💡 教練建議</div>
+                      <div style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>{r.coachAdvice}</div>
+                    </div>
+                  )}
+                  <button onClick={()=>remove(r.id)} style={{alignSelf:'flex-end',padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,color:'#fca5a5',fontSize:11,cursor:'pointer'}}>🗑 刪除此筆</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 function App() {
@@ -774,13 +909,16 @@ function App() {
   const [phase,setPhase]=useState('setup');
   const [scenario,setScenario]=useState(null);
   const [reviewData,setReviewData]=useState(null);
+  const [showHistory,setShowHistory]=useState(false);
 
   if(!hasKey) return <ApiKeyModal onSaved={()=>setHasKey(true)}/>;
 
   return(
     <div style={{minHeight:'100vh',background:'#0a0e1a',color:'white'}}>
+      {showHistory && <HistoryModal onClose={()=>setShowHistory(false)}/>}
       {/* Header bar */}
-      <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px'}}>
+      <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px',display:'flex',gap:8}}>
+        <button onClick={()=>setShowHistory(true)} style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>📋 練習記錄</button>
         <button onClick={()=>{clearApiKey();setHasKey(false);}} title="更換 API Key" style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>🔑 更換 Key</button>
       </div>
 
