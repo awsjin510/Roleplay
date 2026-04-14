@@ -27,6 +27,8 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
 
@@ -149,16 +151,61 @@ function getApiKey() { return localStorage.getItem('anthropic_api_key') || ''; }
 function saveApiKey(k) { localStorage.setItem('anthropic_api_key', k.trim()); }
 function clearApiKey() { localStorage.removeItem('anthropic_api_key'); }
 
+// Firebase init
+let db = null;
+try {
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey: "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
+      authDomain: "roleplay-training.firebaseapp.com",
+      projectId: "roleplay-training",
+      storageBucket: "roleplay-training.firebasestorage.app",
+      messagingSenderId: "759367183812",
+      appId: "1:759367183812:web:595bfc7e19c40344d58891",
+    });
+  }
+  db = firebase.firestore();
+} catch(e) { console.warn('Firebase init failed', e); }
+
+// Practitioner name (stored locally per device)
+function getUserName() { return localStorage.getItem('roleplay_username') || ''; }
+function saveUserName(n) { localStorage.setItem('roleplay_username', n.trim()); }
+
+// History — Firestore primary, localStorage backup
 const HISTORY_KEY = 'roleplay_history';
-function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); } catch{ return []; } }
-function saveHistory(record) {
-  const list = getHistory();
-  list.unshift(record);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 100)));
+const FS_COL = 'practice_records';
+
+function getLocalHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); } catch{ return []; } }
+
+async function getHistory() {
+  if (db) {
+    try {
+      const snap = await db.collection(FS_COL).orderBy('date','desc').limit(200).get();
+      return snap.docs.map(d => ({ ...d.data(), fsId: d.id }));
+    } catch(e) { console.warn('Firestore read failed, using localStorage', e); }
+  }
+  return getLocalHistory();
 }
-function deleteHistory(id) {
-  const list = getHistory().filter(r=>r.id!==id);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+
+async function saveHistory(record) {
+  // localStorage backup
+  const local = getLocalHistory();
+  local.unshift(record);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(local.slice(0, 100)));
+  // Firestore
+  if (db) {
+    try { await db.collection(FS_COL).add(record); }
+    catch(e) { console.warn('Firestore save failed', e); }
+  }
+}
+
+async function deleteHistory(fsId, localId) {
+  const local = getLocalHistory().filter(r => r.id !== localId);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(local));
+  if (db && fsId) {
+    try { await db.collection(FS_COL).doc(fsId).delete(); }
+    catch(e) { console.warn('Firestore delete failed', e); }
+  }
 }
 
 function ApiKeyModal({ onSaved }) {
@@ -697,9 +744,10 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
         if(jsonStr){
           const parsed=JSON.parse(jsonStr);
           setReview(parsed);
-          saveHistory({
+          await saveHistory({
             id: Date.now().toString(),
             date: new Date().toISOString(),
+            practitioner: getUserName() || '匿名',
             scenario,
             turns: mHistory.length-1,
             score: parsed.overallScore||0,
@@ -798,15 +846,25 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
 // HISTORY MODAL
 // ============================================================
 function HistoryModal({ onClose }) {
-  const [list, setList] = useState(getHistory);
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [filterName, setFilterName] = useState('');
   const gc = {S:'#ffd700',A:'#6366f1',B:'#22c55e',C:'#f59e0b',D:'#ef4444'};
 
-  const remove = (id) => {
-    deleteHistory(id);
-    setList(getHistory());
-    if(expanded===id) setExpanded(null);
+  useEffect(() => {
+    getHistory().then(data => { setList(data); setLoading(false); });
+  }, []);
+
+  const remove = async (fsId, localId) => {
+    await deleteHistory(fsId, localId);
+    const data = await getHistory();
+    setList(data);
+    if(expanded===(fsId||localId)) setExpanded(null);
   };
+
+  const names = [...new Set(list.map(r=>r.practitioner).filter(Boolean))];
+  const filtered = filterName ? list.filter(r=>r.practitioner===filterName) : list;
 
   const fmt = (iso) => {
     const d = new Date(iso);
@@ -816,24 +874,34 @@ function HistoryModal({ onClose }) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
       <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.25)',borderRadius:20,width:'100%',maxWidth:640,padding:24,boxShadow:'0 0 60px rgba(99,102,241,0.15)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
           <h2 style={{margin:0,fontSize:18,fontWeight:800}}>📋 練習記錄</h2>
           <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
         </div>
 
-        {list.length===0 ? (
+        {/* Name filter */}
+        {names.length>1 && (
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+            <button onClick={()=>setFilterName('')} style={{padding:'4px 12px',borderRadius:20,border:'1px solid rgba(255,255,255,0.12)',background:filterName?'transparent':'rgba(99,102,241,0.25)',color:filterName?'rgba(255,255,255,0.45)':'white',fontSize:12,cursor:'pointer'}}>全部</button>
+            {names.map(n=>(
+              <button key={n} onClick={()=>setFilterName(n===filterName?'':n)} style={{padding:'4px 12px',borderRadius:20,border:'1px solid rgba(255,255,255,0.12)',background:filterName===n?'rgba(99,102,241,0.25)':'transparent',color:filterName===n?'white':'rgba(255,255,255,0.45)',fontSize:12,cursor:'pointer'}}>{n}</button>
+            ))}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>載入中...</div>
+        ) : filtered.length===0 ? (
           <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>
             還沒有練習記錄，完成第一次覆盤後會自動儲存。
           </div>
-        ) : list.map(r => {
+        ) : filtered.map(r => {
           const color = gc[r.grade]||'#6366f1';
-          const isOpen = expanded===r.id;
+          const uid = r.fsId || r.id;
+          const isOpen = expanded===uid;
           return (
-            <div key={r.id} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${isOpen?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)'}`,borderRadius:14,marginBottom:10,overflow:'hidden',transition:'border-color 0.2s'}}>
-              {/* Header row */}
-              <div onClick={()=>setExpanded(isOpen?null:r.id)}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',cursor:'pointer'}}>
-                {/* Score circle */}
+            <div key={uid} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${isOpen?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)'}`,borderRadius:14,marginBottom:10,overflow:'hidden',transition:'border-color 0.2s'}}>
+              <div onClick={()=>setExpanded(isOpen?null:uid)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',cursor:'pointer'}}>
                 <div style={{flexShrink:0,width:44,height:44,position:'relative'}}>
                   <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
                     <circle cx={22} cy={22} r={18} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={4}/>
@@ -842,9 +910,9 @@ function HistoryModal({ onClose }) {
                   </svg>
                   <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color}}>{r.score}</div>
                 </div>
-                {/* Info */}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,flexWrap:'wrap'}}>
+                    {r.practitioner && <span style={{fontSize:12,fontWeight:700,color:'rgba(255,255,255,0.9)',background:'rgba(99,102,241,0.2)',padding:'1px 8px',borderRadius:10}}>{r.practitioner}</span>}
                     <span style={{fontSize:13,fontWeight:700,color}}>{r.grade} 等級</span>
                     <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>{fmt(r.date)}</span>
                     <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>· {r.turns} 輪</span>
@@ -858,11 +926,9 @@ function HistoryModal({ onClose }) {
                 <span style={{color:'rgba(255,255,255,0.3)',fontSize:13,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
               </div>
 
-              {/* Expanded detail */}
               {isOpen && (
                 <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
                   {r.summary && <p style={{margin:0,fontSize:13,color:'rgba(255,255,255,0.65)',lineHeight:1.6}}>{r.summary}</p>}
-
                   <div style={{display:'flex',gap:10}}>
                     {[['信任度',r.finalMetrics?.trust,'#6366f1'],['興趣度',r.finalMetrics?.interest,'#a855f7'],['購買意願',r.finalMetrics?.buyIntent,'#06b6d4']].map(([l,v,c])=>(
                       <div key={l} style={{flex:1,background:'rgba(255,255,255,0.04)',borderRadius:10,padding:'8px 10px',textAlign:'center'}}>
@@ -871,26 +937,10 @@ function HistoryModal({ onClose }) {
                       </div>
                     ))}
                   </div>
-
-                  {r.strengths?.length>0 && (
-                    <div>
-                      <div style={{fontSize:12,color:'#22c55e',fontWeight:600,marginBottom:5}}>✅ 做得好</div>
-                      {r.strengths.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}
-                    </div>
-                  )}
-                  {r.improvements?.length>0 && (
-                    <div>
-                      <div style={{fontSize:12,color:'#f59e0b',fontWeight:600,marginBottom:5}}>⚠️ 可改進</div>
-                      {r.improvements.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}
-                    </div>
-                  )}
-                  {r.coachAdvice && (
-                    <div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.15)',borderRadius:10,padding:'10px 12px'}}>
-                      <div style={{fontSize:12,color:'#22d3ee',fontWeight:600,marginBottom:4}}>💡 教練建議</div>
-                      <div style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>{r.coachAdvice}</div>
-                    </div>
-                  )}
-                  <button onClick={()=>remove(r.id)} style={{alignSelf:'flex-end',padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,color:'#fca5a5',fontSize:11,cursor:'pointer'}}>🗑 刪除此筆</button>
+                  {r.strengths?.length>0 && <div><div style={{fontSize:12,color:'#22c55e',fontWeight:600,marginBottom:5}}>✅ 做得好</div>{r.strengths.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}</div>}
+                  {r.improvements?.length>0 && <div><div style={{fontSize:12,color:'#f59e0b',fontWeight:600,marginBottom:5}}>⚠️ 可改進</div>{r.improvements.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}</div>}
+                  {r.coachAdvice && <div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.15)',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:12,color:'#22d3ee',fontWeight:600,marginBottom:4}}>💡 教練建議</div><div style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>{r.coachAdvice}</div></div>}
+                  <button onClick={()=>remove(r.fsId, r.id)} style={{alignSelf:'flex-end',padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,color:'#fca5a5',fontSize:11,cursor:'pointer'}}>🗑 刪除此筆</button>
                 </div>
               )}
             </div>
@@ -910,14 +960,41 @@ function App() {
   const [scenario,setScenario]=useState(null);
   const [reviewData,setReviewData]=useState(null);
   const [showHistory,setShowHistory]=useState(false);
+  const [userName,setUserName]=useState(getUserName);
+  const [editingName,setEditingName]=useState(false);
+  const [nameInput,setNameInput]=useState('');
 
   if(!hasKey) return <ApiKeyModal onSaved={()=>setHasKey(true)}/>;
+  if(!userName) return (
+    <div style={{position:'fixed',inset:0,background:'#0a0e1a',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.3)',borderRadius:20,padding:32,maxWidth:380,width:'100%',boxShadow:'0 0 60px rgba(99,102,241,0.2)'}}>
+        <div style={{fontSize:28,textAlign:'center',marginBottom:8}}>👤</div>
+        <h2 style={{textAlign:'center',fontSize:18,fontWeight:800,marginBottom:6}}>你的名字是？</h2>
+        <p style={{color:'rgba(255,255,255,0.5)',fontSize:13,textAlign:'center',marginBottom:20,lineHeight:1.6}}>用於記錄每次練習，讓團隊可以看到各自的進度。</p>
+        <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&nameInput.trim()&&(saveUserName(nameInput),setUserName(nameInput.trim()))}
+          placeholder="輸入你的名字..." autoFocus
+          style={{width:'100%',padding:'12px 14px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,color:'white',fontSize:14,outline:'none',marginBottom:8}}/>
+        <button onClick={()=>{if(nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());}}}
+          disabled={!nameInput.trim()}
+          style={{width:'100%',padding:'13px 0',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:700,fontSize:15,cursor:nameInput.trim()?'pointer':'not-allowed',opacity:nameInput.trim()?1:0.5}}>開始練習</button>
+      </div>
+    </div>
+  );
 
   return(
     <div style={{minHeight:'100vh',background:'#0a0e1a',color:'white'}}>
       {showHistory && <HistoryModal onClose={()=>setShowHistory(false)}/>}
       {/* Header bar */}
-      <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px',display:'flex',gap:8}}>
+      <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px',display:'flex',gap:8,alignItems:'center'}}>
+        {editingName ? (
+          <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+            onBlur={()=>{if(nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());}setEditingName(false);}}
+            onKeyDown={e=>{if(e.key==='Enter'&&nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());setEditingName(false);}}}
+            autoFocus style={{padding:'4px 8px',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(99,102,241,0.4)',borderRadius:6,color:'white',fontSize:11,width:90,outline:'none'}}/>
+        ) : (
+          <button onClick={()=>{setNameInput(userName);setEditingName(true);}} style={{padding:'5px 10px',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:8,color:'rgba(255,255,255,0.6)',fontSize:11,cursor:'pointer'}}>👤 {userName}</button>
+        )}
         <button onClick={()=>setShowHistory(true)} style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>📋 練習記錄</button>
         <button onClick={()=>{clearApiKey();setHasKey(false);}} title="更換 API Key" style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>🔑 更換 Key</button>
       </div>
