@@ -928,6 +928,135 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
 }
 
 // ============================================================
+// LEADERBOARD MODAL
+// ============================================================
+function LeaderboardModal({ onClose }) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState('total'); // 'total' | 'count' | 'avg'
+
+  useEffect(() => {
+    getHistory().then(records => {
+      // 聚合每個練習者的統計
+      const map = {};
+      records.forEach(r => {
+        const name = r.practitioner || '匿名';
+        if (!map[name]) map[name] = { name, count: 0, totalScore: 0, bestScore: 0, scores: [] };
+        map[name].count += 1;
+        map[name].totalScore += (r.score || 0);
+        map[name].bestScore = Math.max(map[name].bestScore, r.score || 0);
+        map[name].scores.push(r.score || 0);
+      });
+      const list = Object.values(map).map(p => ({
+        ...p,
+        avgScore: Math.round(p.totalScore / p.count),
+      }));
+      setData(list);
+      setLoading(false);
+    });
+  }, []);
+
+  const sorted = [...data].sort((a, b) => {
+    if (sortBy === 'total') return b.totalScore - a.totalScore;
+    if (sortBy === 'count') return b.count - a.count;
+    return b.avgScore - a.avgScore;
+  });
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const podiumColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+  const podiumBg = ['rgba(255,215,0,0.12)', 'rgba(192,192,192,0.1)', 'rgba(205,127,50,0.1)'];
+  const top3 = sorted.slice(0, 3);
+  const rest = sorted.slice(3);
+
+  const sortLabel = { total: '累計總分', count: '練習次數', avg: '平均分' };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
+      <div style={{background:'#111827',border:'1px solid rgba(255,215,0,0.2)',borderRadius:20,width:'100%',maxWidth:560,padding:24,boxShadow:'0 0 60px rgba(255,215,0,0.08)'}}>
+
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800}}>🏆 練習排行榜</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+        </div>
+
+        {/* Sort toggle */}
+        <div style={{display:'flex',gap:6,marginBottom:20}}>
+          {['total','count','avg'].map(k=>(
+            <button key={k} onClick={()=>setSortBy(k)}
+              style={{flex:1,padding:'7px 0',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:sortBy===k?'rgba(255,215,0,0.15)':'transparent',color:sortBy===k?'#ffd700':'rgba(255,255,255,0.4)',fontSize:12,fontWeight:sortBy===k?700:400,cursor:'pointer',transition:'all 0.2s'}}>
+              {sortLabel[k]}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>載入中...</div>
+        ) : sorted.length === 0 ? (
+          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>還沒有練習記錄，完成第一次覆盤後會出現在這裡。</div>
+        ) : (
+          <>
+            {/* Podium — top 3 */}
+            {top3.length > 0 && (
+              <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',gap:10,marginBottom:24}}>
+                {/* Reorder: 2nd, 1st, 3rd */}
+                {[top3[1], top3[0], top3[2]].map((p, visualIdx) => {
+                  if (!p) return <div key={visualIdx} style={{flex:1}}/>;
+                  const realRank = visualIdx === 0 ? 1 : visualIdx === 1 ? 0 : 2;
+                  const height = [100, 130, 80][visualIdx];
+                  const color = podiumColors[realRank];
+                  const bg = podiumBg[realRank];
+                  const val = sortBy==='total' ? p.totalScore : sortBy==='count' ? p.count : p.avgScore;
+                  const unit = sortBy==='count' ? '次' : '分';
+                  return (
+                    <div key={p.name} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+                      <div style={{fontSize:22}}>{medals[realRank]}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,0.9)',textAlign:'center',maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                      <div style={{fontSize:11,color,fontWeight:600}}>{val}{unit}</div>
+                      <div style={{width:'100%',height,background:bg,border:`1px solid ${color}44`,borderRadius:'8px 8px 0 0',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <span style={{fontSize:28,fontWeight:900,color}}>{realRank+1}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Full ranking list */}
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {sorted.map((p, i) => {
+                const isMe = p.name === getUserName();
+                const val = sortBy==='total' ? p.totalScore : sortBy==='count' ? p.count : p.avgScore;
+                const unit = sortBy==='count' ? '次' : '分';
+                const rankColor = i===0?'#ffd700':i===1?'#c0c0c0':i===2?'#cd7f32':'rgba(255,255,255,0.3)';
+                return (
+                  <div key={p.name} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:isMe?'rgba(99,102,241,0.12)':'rgba(255,255,255,0.03)',border:`1px solid ${isMe?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.06)'}`,borderRadius:10}}>
+                    <div style={{width:28,textAlign:'center',fontSize:i<3?18:14,fontWeight:800,color:rankColor,flexShrink:0}}>
+                      {i<3 ? medals[i] : i+1}
+                    </div>
+                    <div style={{flex:1,fontWeight:600,fontSize:14,color:isMe?'#a5b4fc':'rgba(255,255,255,0.85)'}}>
+                      {p.name}{isMe&&<span style={{fontSize:10,marginLeft:6,color:'rgba(99,102,241,0.8)'}}>（你）</span>}
+                    </div>
+                    <div style={{display:'flex',gap:14,fontSize:12,color:'rgba(255,255,255,0.4)'}}>
+                      <span>{p.count} 次</span>
+                      <span>均 {p.avgScore}</span>
+                      <span>最高 {p.bestScore}</span>
+                    </div>
+                    <div style={{fontSize:15,fontWeight:800,color:rankColor,minWidth:52,textAlign:'right'}}>
+                      {val}<span style={{fontSize:10,fontWeight:400,marginLeft:2}}>{unit}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // HISTORY MODAL
 // ============================================================
 function HistoryModal({ onClose }) {
@@ -1045,6 +1174,7 @@ function App() {
   const [scenario,setScenario]=useState(null);
   const [reviewData,setReviewData]=useState(null);
   const [showHistory,setShowHistory]=useState(false);
+  const [showLeaderboard,setShowLeaderboard]=useState(false);
   const [userName,setUserName]=useState(getUserName);
   const [editingName,setEditingName]=useState(false);
   const [nameInput,setNameInput]=useState('');
@@ -1070,6 +1200,7 @@ function App() {
   return(
     <div style={{minHeight:'100vh',background:'#0a0e1a',color:'white'}}>
       {showHistory && <HistoryModal onClose={()=>setShowHistory(false)}/>}
+      {showLeaderboard && <LeaderboardModal onClose={()=>setShowLeaderboard(false)}/>}
       {/* Header bar */}
       <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px',display:'flex',gap:8,alignItems:'center'}}>
         {editingName ? (
@@ -1080,6 +1211,7 @@ function App() {
         ) : (
           <button onClick={()=>{setNameInput(userName);setEditingName(true);}} style={{padding:'5px 10px',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:8,color:'rgba(255,255,255,0.6)',fontSize:11,cursor:'pointer'}}>👤 {userName}</button>
         )}
+        <button onClick={()=>setShowLeaderboard(true)} style={{padding:'5px 10px',background:'rgba(255,215,0,0.08)',border:'1px solid rgba(255,215,0,0.2)',borderRadius:8,color:'rgba(255,215,0,0.7)',fontSize:11,cursor:'pointer'}}>🏆 排行榜</button>
         <button onClick={()=>setShowHistory(true)} style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>📋 練習記錄</button>
         <button onClick={()=>{clearApiKey();setHasKey(false);}} title="更換 API Key" style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>🔑 更換 Key</button>
       </div>
