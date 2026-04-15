@@ -320,7 +320,11 @@ function buildSystemPrompt(scenario) {
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
   const cloudNote = cloudEnv ? `你目前使用 ${scenario.雲端環境}，偶爾可以自然帶到相關經驗，但不要每輪都問雲端問題。` : '';
   const secProd = securityProductProfiles[scenario.資安項目];
-  const secNote = secProd ? `業務這次介紹的具體產品是「${scenario.資安項目}」（${secProd.category}）。你對它的基本認知：${secProd.description} 你可能在意的點：${secProd.keyPoints}。` : '';
+  const secNote = secProd ? `
+業務這次介紹的具體產品是「${scenario.資安項目}」（${secProd.category}）。
+你對這個產品已有基本認知：${secProd.description}
+你在意的具體問題點：${secProd.keyPoints}。
+重要：你已經知道這個產品是什麼、大概怎麼運作，所以不要問「這個產品是什麼」或「怎麼運作」這類基礎問題。你應該問的是：這個產品能不能解決你的特定狀況、如何整合進你現有環境、實際導入案例、費用結構等具體業務問題。` : '';
   return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
