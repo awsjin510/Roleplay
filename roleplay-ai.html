@@ -112,8 +112,8 @@ const cloudEnvProfiles = {
 };
 const securityProductProfiles = {
   'appGuard': {
-    category: '行動應用程式安全防護（App Security）',
-    description: '果核數位（Gamania 旗下）開發的 Android / iOS App 防護方案，在不修改原始碼的前提下，透過加密與完整性驗證防止 App 被逆向工程、破解、竄改或仿冒，並即時偵測駭客工具與外掛程式。已通過 CC EAL 2 加密認證，獲台灣超過 50% 金融機構及軍方採用，累計保護超過 2 億次下載。',
+    category: '行動應用程式安全防護（App Security，僅支援 Android / iOS）',
+    description: '果核數位（Gamania 旗下）開發的 Android / iOS App 防護方案，在不修改原始碼的前提下，透過加密與完整性驗證防止 App 被逆向工程、破解、竄改或仿冒，並即時偵測駭客工具與外掛程式。不支援 Windows / macOS / Linux 桌機或伺服器端點。已通過 CC EAL 2 加密認證，獲台灣超過 50% 金融機構及軍方採用，累計保護超過 2 億次下載。',
     keyPoints: '無需修改原始碼、不需開發人員介入即可部署（20-40 分鐘完成）、金融機構與政府高信賴案例（中華郵政、元大銀行、花旗、渣打等）',
   },
   'Ciro': {
@@ -324,7 +324,7 @@ function buildSystemPrompt(scenario) {
 業務這次介紹的具體產品是「${scenario.資安項目}」（${secProd.category}）。
 你對這個產品已有基本認知：${secProd.description}
 你在意的具體問題點：${secProd.keyPoints}。
-重要：你已經知道這個產品是什麼、大概怎麼運作，所以不要問「這個產品是什麼」或「怎麼運作」這類基礎問題。你應該問的是：這個產品能不能解決你的特定狀況、如何整合進你現有環境、實際導入案例、費用結構等具體業務問題。` : '';
+重要：你已經知道這個產品是什麼、大概怎麼運作，所以不要問「這個產品是什麼」或「怎麼運作」這類基礎問題。你應該問的是：這個產品能不能解決你的特定狀況、如何整合進你現有環境、實際導入案例、費用結構等具體業務問題。也不要問這個產品明顯不支援的平台或功能（例如 appGuard 只支援 Android/iOS，就不要問能不能保護 Windows 桌機）。` : '';
   return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
