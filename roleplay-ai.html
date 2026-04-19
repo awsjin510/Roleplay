@@ -635,8 +635,10 @@ function ChatPhase({ scenario, onEnd }) {
   const [turns,setTurns]=useState(0);
   const [toast,setToast]=useState(null);
   const [timeLeft,setTimeLeft]=useState(null);
+  const [overtime,setOvertime]=useState(0); // seconds past 0
   const [speaking,setSpeaking]=useState(false);
   const timerRef=useRef(null);
+  const overtimeRef=useRef(0);
   const sendRef=useRef(null);
   const endRef=useRef(null);
   const recognitionRef=useRef(null);
@@ -646,24 +648,32 @@ function ChatPhase({ scenario, onEnd }) {
   // 計時器：AI 回覆完畢後啟動，使用者送出後停止
   useEffect(()=>{
     if(!loading && messages.length>0){
-      setTimeLeft(60);
+      setTimeLeft(120);
+      setOvertime(0);
+      overtimeRef.current=0;
       clearInterval(timerRef.current);
       timerRef.current=setInterval(()=>{
         setTimeLeft(t=>{
-          if(t<=1){
-            clearInterval(timerRef.current);
-            // 時間到：有文字就自動送出，沒有就提示
-            if(sendRef.current) sendRef.current();
-            else setToast('⏰ 時間到！請盡快回應');
-            return 0;
-          }
-          return t-1;
+          if(t>0) return t-1;
+          // 進入超時階段：持續計秒，每 10 秒扣 1 信任度
+          setOvertime(ot=>{
+            const next=ot+1;
+            overtimeRef.current=next;
+            if(next%10===0){
+              setMetrics(m=>({...m, trust:Math.max(0,m.trust-1)}));
+              setToast(`⏰ 超時 ${next} 秒，客戶信任度 -1`);
+            }
+            return next;
+          });
+          return 0;
         });
       },1000);
     }
     if(loading){
       clearInterval(timerRef.current);
       setTimeLeft(null);
+      setOvertime(0);
+      overtimeRef.current=0;
     }
     return ()=>clearInterval(timerRef.current);
   },[loading,messages.length]);
@@ -715,6 +725,7 @@ function ChatPhase({ scenario, onEnd }) {
     setSpeaking(false);
     clearInterval(timerRef.current);
     setTimeLeft(null);
+    setOvertime(0); overtimeRef.current=0;
     const txt=input.trim(); setInput('');
     setMessages(p=>[...p,{role:'user',content:txt}]);
     apiMsgs.current.push({role:'user',content:txt});
@@ -748,7 +759,7 @@ function ChatPhase({ scenario, onEnd }) {
             第 {turns} 輪
           </span>
           {loading&&<span style={{fontSize:13,color:'rgba(255,255,255,0.4)'}}>AI 回覆中...</span>}
-          {!loading&&timeLeft!==null&&(
+          {!loading&&timeLeft!==null&&overtime===0&&(
             <span style={{
               display:'flex',alignItems:'center',gap:5,
               background:timeLeft<=10?'rgba(239,68,68,0.15)':timeLeft<=30?'rgba(245,158,11,0.15)':'rgba(34,197,94,0.12)',
@@ -758,6 +769,18 @@ function ChatPhase({ scenario, onEnd }) {
               animation:timeLeft<=10?'pulse 0.8s ease-in-out infinite':'none',
             }}>
               ⏱ {timeLeft}s
+            </span>
+          )}
+          {!loading&&overtime>0&&(
+            <span style={{
+              display:'flex',alignItems:'center',gap:5,
+              background:'rgba(239,68,68,0.2)',
+              border:'1px solid rgba(239,68,68,0.6)',
+              borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:700,
+              color:'#f87171',
+              animation:'pulse 0.8s ease-in-out infinite',
+            }}>
+              ⏰ 超時 +{overtime}s {overtime>=10?`(信任 -${Math.floor(overtime/10)})`:'' }
             </span>
           )}
         </div>
