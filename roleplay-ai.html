@@ -33,6 +33,15 @@
 const { useState, useRef, useEffect, useCallback } = React;
 
 // ============================================================
+// CONFIG — 外部服務端點（需與 worker.js 部署對齊）
+// ============================================================
+const CONFIG = {
+  // RAG 留空則停用，練習仍可正常進行（使用硬編碼 profiles）
+  workerUrl: '',
+  appToken: '',
+};
+
+// ============================================================
 // DATA
 // ============================================================
 const SLOT_DATA = {
@@ -313,7 +322,7 @@ function ApiKeyModal({ onSaved }) {
 // ============================================================
 // PROMPT BUILDERS
 // ============================================================
-function buildSystemPrompt(scenario) {
+function buildSystemPrompt(scenario, ragChunks = []) {
   const role = roleProfiles[scenario.角色] || roleProfiles['IT窗口'];
   const industry = industryProfiles[scenario.產業] || industryProfiles['新創公司'];
   const difficulty = difficultyBehaviors[scenario.難度] || '';
@@ -325,6 +334,12 @@ function buildSystemPrompt(scenario) {
 你對這個產品已有基本認知：${secProd.description}
 你在意的具體問題點：${secProd.keyPoints}。
 重要：你已經知道這個產品是什麼、大概怎麼運作，所以不要問「這個產品是什麼」或「怎麼運作」這類基礎問題。你應該問的是：這個產品能不能解決你的特定狀況、如何整合進你現有環境、實際導入案例、費用結構等具體業務問題。也不要問這個產品明顯不支援的平台或功能（例如 appGuard 只支援 Android/iOS，就不要問能不能保護 Windows 桌機）。` : '';
+  const ragNote = (ragChunks && ragChunks.length) ? `
+
+---
+公司知識庫（以下是公司提供的實際產品與流程資料，請優先以此為準，不要只憑通用知識回答或提問）：
+${ragChunks.join('\n\n---\n')}
+---` : '';
   return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
@@ -352,7 +367,7 @@ ${difficulty ? `你的風格特色：${difficulty}` : ''}
 
 隱藏指標（每次回覆末尾附上，不顯示給使用者）：
 <!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"一句話記錄"}-->
-初始值 trust=65, interest=65, buyIntent=55。業務說明清楚 +10 到 +18，普通回應 +3 到 +7，明顯答非所問或誇大才 -3 到 -5。`
+初始值 trust=65, interest=65, buyIntent=55。業務說明清楚 +10 到 +18，普通回應 +3 到 +7，明顯答非所問或誇大才 -3 到 -5。${ragNote}`
 }
 
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
@@ -367,6 +382,23 @@ ${conversationLog}
 
 請用 JSON 格式回覆（不含其他文字）：
 {"overallScore":75,"grade":"B","summary":"總結50字","strengths":["優點1","優點2"],"improvements":["改進1","改進2"],"missedOpportunities":["錯過機會1"],"keyMoment":"關鍵轉折描述","coachAdvice":"具體建議100字","metricsAnalysis":{"trustTrend":"上升","interestTrend":"持平","buyIntentTrend":"下降","analysis":"分析50字"}}`;
+}
+
+async function queryRAG(scenario) {
+  if (!CONFIG.workerUrl || !CONFIG.appToken) return [];
+  const terms = [scenario.資安項目 || scenario.產品, scenario.產業, scenario.角色, scenario.情境].filter(Boolean).join(' ');
+  if (!terms) return [];
+  try {
+    const res = await fetch(CONFIG.workerUrl.replace(/\/$/, '') + '/query', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-App-Token': CONFIG.appToken },
+      body: JSON.stringify({ query: terms, topK: 5 }),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.matches || []).map(m => m.text).filter(Boolean);
+  } catch { return []; }
 }
 
 async function sendMessage(conversationHistory, systemPrompt, maxTokens=1000) {
@@ -637,6 +669,7 @@ function ChatPhase({ scenario, onEnd }) {
   const [timeLeft,setTimeLeft]=useState(null);
   const [overtime,setOvertime]=useState(0); // seconds past 0
   const [speaking,setSpeaking]=useState(false);
+  const [ragActive,setRagActive]=useState(false);
   const timerRef=useRef(null);
   const overtimeRef=useRef(0);
   const sendRef=useRef(null);
@@ -681,6 +714,11 @@ function ChatPhase({ scenario, onEnd }) {
   useEffect(()=>{
     (async()=>{
       setLoading(true);
+      const chunks=await queryRAG(scenario);
+      if(chunks.length){
+        sys.current=buildSystemPrompt(scenario,chunks);
+        setRagActive(true);
+      }
       const r=await sendMessage(apiMsgs.current,sys.current);
       apiMsgs.current.push({role:'assistant',content:r.text});
       setMessages([{role:'assistant',content:r.text}]);
@@ -753,6 +791,11 @@ function ChatPhase({ scenario, onEnd }) {
               {SLOT_DATA[cat].icon} {scenario[cat]}
             </span>
           ))}
+          {ragActive&&(
+            <span style={{background:'rgba(34,197,94,0.15)',border:'1px solid rgba(34,197,94,0.35)',borderRadius:6,padding:'3px 10px',fontSize:13,color:'#86efac'}}>
+              📚 知識庫已載入
+            </span>
+          )}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <span style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:600,color:'#a5b4fc'}}>
