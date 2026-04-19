@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RAG 知識庫管理 — 業務練習器</title>
+<!-- File parsing libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -28,7 +32,7 @@
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 8px; padding: 9px 12px; width: 100%;
   }
-  textarea { min-height: 200px; resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
+  textarea { min-height: 180px; resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
   button {
     background: linear-gradient(135deg,#6366f1,#a855f7);
     border: none; cursor: pointer; font-weight: 600;
@@ -52,12 +56,35 @@
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   }
   .toast.err { background: rgba(239,68,68,0.95); }
-  .cfg {
-    background: rgba(234,179,8,0.08);
-    border: 1px solid rgba(234,179,8,0.3);
-    border-radius: 8px; padding: 10px 14px; font-size: 13px;
-    color: #fcd34d;
+
+  /* Drop zone */
+  #dropZone {
+    border: 2px dashed rgba(99,102,241,0.4);
+    border-radius: 10px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 14px;
+    user-select: none;
   }
+  #dropZone:hover, #dropZone.over {
+    border-color: rgba(99,102,241,0.85);
+    background: rgba(99,102,241,0.07);
+  }
+  #dropZone.parsing {
+    border-color: rgba(245,158,11,0.7);
+    background: rgba(245,158,11,0.06);
+  }
+  #dropZone.done {
+    border-color: rgba(34,197,94,0.7);
+    background: rgba(34,197,94,0.06);
+  }
+  #dropZone .icon { font-size: 32px; margin-bottom: 8px; }
+  #dropZone .hint { font-size: 14px; color: rgba(255,255,255,0.55); }
+  #dropZone .hint b { color: #a5b4fc; }
+  #dropZone .formats { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 5px; }
+  #fileInput { display: none; }
 </style>
 </head>
 <body>
@@ -79,7 +106,16 @@
   <div id="mainBlock" style="display:none">
     <div class="card">
       <h2>2. 上傳文件</h2>
-      <div class="cfg">PDF / Word / Excel 目前請先轉成純文字（複製貼上）。未來版本會支援客戶端自動解析。</div>
+
+      <!-- Drop zone -->
+      <div id="dropZone">
+        <div class="icon">📂</div>
+        <div class="hint">拖曳檔案到這裡，或 <b>點擊選擇檔案</b></div>
+        <div class="formats">支援：PDF、Word（.docx）、Excel（.xlsx / .xls / .csv）、純文字（.txt / .md）</div>
+        <div class="hint" id="dropStatus" style="margin-top:8px"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md">
+
       <div class="row">
         <div>
           <label>文件 ID（英數 + 底線，唯一）</label>
@@ -94,11 +130,11 @@
       <select id="docProduct">
         <option value="general">通用 / 全部</option>
       </select>
-      <label>文件內容（純文字 / Markdown）</label>
-      <textarea id="docText" placeholder="把轉好的純文字貼這裡..."></textarea>
-      <div style="margin-top:12px;">
+      <label>解析出的文字內容（可在此校對後再上傳）</label>
+      <textarea id="docText" placeholder="拖曳或選擇檔案後自動填入，也可直接貼上純文字..."></textarea>
+      <div style="margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <button id="uploadBtn">上傳並建立索引</button>
-        <span class="muted" id="uploadStatus" style="margin-left:10px"></span>
+        <span class="muted" id="uploadStatus"></span>
       </div>
     </div>
 
@@ -123,6 +159,11 @@
 <script>
 const PRODUCTS = ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"];
 
+// Set pdf.js worker
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 const $ = id => document.getElementById(id);
 let workerUrl = sessionStorage.getItem('ragWorkerUrl') || '';
 let adminToken = sessionStorage.getItem('ragAdminToken') || '';
@@ -132,7 +173,7 @@ function toast(msg, isErr) {
   t.className = 'toast' + (isErr ? ' err' : '');
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+  setTimeout(() => t.remove(), 3500);
 }
 
 function api(path, opts = {}) {
@@ -159,6 +200,111 @@ function renderProducts() {
   });
 }
 
+// ── File name → docId / guess product ──────────────────────────
+function nameToId(filename) {
+  return filename.replace(/\.[^.]+$/, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'doc-' + Date.now();
+}
+
+function guessProduct(filename) {
+  const lower = filename.toLowerCase();
+  return PRODUCTS.find(p => lower.includes(p.toLowerCase())) || null;
+}
+
+// ── Parsers ─────────────────────────────────────────────────────
+async function parsePDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const parts = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const line = content.items.map(it => it.str).join(' ').trim();
+    if (line) parts.push(line);
+  }
+  return parts.join('\n\n');
+}
+
+async function parseDocx(file) {
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value.trim();
+}
+
+async function parseExcel(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const parts = [];
+  wb.SheetNames.forEach(name => {
+    const ws = wb.Sheets[name];
+    const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+    if (csv.trim()) parts.push(`=== ${name} ===\n${csv.trim()}`);
+  });
+  return parts.join('\n\n');
+}
+
+async function parseTxt(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result.trim());
+    r.onerror = rej;
+    r.readAsText(file, 'UTF-8');
+  });
+}
+
+async function parseFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return parsePDF(file);
+  if (ext === 'docx') return parseDocx(file);
+  if (['xlsx','xls','csv'].includes(ext)) return parseExcel(file);
+  if (['txt','md'].includes(ext)) return parseTxt(file);
+  throw new Error(`不支援的格式：.${ext}`);
+}
+
+function dropState(state, msg) {
+  const dz = $('dropZone');
+  dz.className = state ? state : '';
+  $('dropStatus').textContent = msg || '';
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  dropState('parsing', `解析中：${file.name}...`);
+  try {
+    const text = await parseFile(file);
+    $('docText').value = text;
+    // auto-fill ID and name if empty
+    if (!$('docId').value) $('docId').value = nameToId(file.name);
+    if (!$('docName').value) $('docName').value = file.name.replace(/\.[^.]+$/, '');
+    // auto-select product if guessable
+    const p = guessProduct(file.name);
+    if (p) $('docProduct').value = p;
+    const words = text.split(/\s+/).length;
+    dropState('done', `✅ 解析完成（約 ${words.toLocaleString()} 字）。請確認內容後按「上傳並建立索引」。`);
+  } catch (e) {
+    dropState('', '');
+    toast('解析失敗：' + e.message, true);
+  }
+}
+
+// Drop zone events
+const dz = $('dropZone');
+dz.addEventListener('click', () => $('fileInput').click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+$('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+  e.target.value = '';
+});
+
+// ── Docs list ────────────────────────────────────────────────────
 async function loadDocs() {
   $('docsTbody').innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">載入中...</td></tr>';
   try {
@@ -204,6 +350,7 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ── Auth ─────────────────────────────────────────────────────────
 $('loginBtn').addEventListener('click', () => {
   workerUrl = $('workerUrl').value.trim();
   adminToken = $('adminToken').value.trim();
@@ -227,6 +374,7 @@ $('logoutBtn').addEventListener('click', () => {
 
 $('refreshBtn').addEventListener('click', loadDocs);
 
+// ── Upload ────────────────────────────────────────────────────────
 $('uploadBtn').addEventListener('click', async () => {
   const docId = $('docId').value.trim();
   const name = $('docName').value.trim();
@@ -242,10 +390,11 @@ $('uploadBtn').addEventListener('click', async () => {
       method: 'POST',
       body: JSON.stringify({ docId, name, product, text }),
     });
-    toast(`已建立 ${res.chunkCount} 個向量`);
+    toast(`✅ 已建立 ${res.chunkCount} 個向量`);
     $('docText').value = '';
     $('docId').value = '';
     $('docName').value = '';
+    dropState('', '');
     loadDocs();
   } catch (e) {
     toast('上傳失敗：' + e.message, true);
@@ -255,7 +404,7 @@ $('uploadBtn').addEventListener('click', async () => {
   }
 });
 
-// init
+// ── Init ──────────────────────────────────────────────────────────
 renderProducts();
 if (workerUrl && adminToken) {
   $('workerUrl').value = workerUrl;
