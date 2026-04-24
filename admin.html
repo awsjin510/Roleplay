@@ -358,28 +358,30 @@ $('fileInput').addEventListener('change', e => {
   e.target.value = '';
 });
 
-// ── Docs list ────────────────────────────────────────────────────
+// ── Docs list (from Firestore rag_docs) ─────────────────────────
 async function loadDocs() {
   $('docsTbody').innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">載入中...</td></tr>';
   try {
-    const { docs } = await api('/docs');
+    const snap = await db.collection('rag_docs').orderBy('uploadedAt', 'desc').get();
     const tbody = $('docsTbody');
     tbody.innerHTML = '';
-    $('docsEmpty').style.display = docs.length ? 'none' : 'block';
-    for (const d of docs) {
+    $('docsEmpty').style.display = snap.empty ? 'block' : 'none';
+    snap.forEach(doc => {
+      const d = doc.data();
       const tr = document.createElement('tr');
-      const when = d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('zh-TW') : '-';
+      const when = d.uploadedAt?.toDate ? d.uploadedAt.toDate().toLocaleString('zh-TW')
+        : (d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('zh-TW') : '-');
       tr.innerHTML = `
-        <td>${escapeHtml(d.name)}</td>
-        <td><code style="font-size:12px;color:rgba(255,255,255,0.55)">${escapeHtml(d.id)}</code></td>
+        <td>${escapeHtml(d.name || doc.id)}</td>
+        <td><code style="font-size:12px;color:rgba(255,255,255,0.55)">${escapeHtml(doc.id)}</code></td>
         <td><span class="pill">${escapeHtml(d.product || 'general')}</span></td>
         <td>${d.chunkCount || 0}</td>
         <td class="muted">${when}</td>
-        <td><span class="pill ok">${escapeHtml(d.status || 'ready')}</span></td>
-        <td><button class="danger" data-id="${escapeHtml(d.id)}">刪除</button></td>
+        <td><span class="pill ok">ready</span></td>
+        <td><button class="danger" data-id="${escapeHtml(doc.id)}">刪除</button></td>
       `;
       tbody.appendChild(tr);
-    }
+    });
     tbody.querySelectorAll('button.danger').forEach(b => {
       b.addEventListener('click', () => deleteDoc(b.dataset.id));
     });
@@ -392,8 +394,15 @@ async function loadDocs() {
 async function deleteDoc(id) {
   if (!confirm(`確定刪除「${id}」？此動作無法復原。`)) return;
   try {
-    await api('/docs/' + encodeURIComponent(id), { method: 'DELETE' });
-    toast('已刪除');
+    // delete all chunks with this docId (max 500 per batch)
+    const snap = await db.collection('rag_chunks').where('docId', '==', id).get();
+    if (!snap.empty) {
+      const batch = db.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await db.collection('rag_docs').doc(id).delete();
+    toast(`已刪除（${snap.size} chunks）`);
     loadDocs();
   } catch (e) {
     toast('刪除失敗：' + e.message, true);
@@ -404,31 +413,56 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ── Auth ─────────────────────────────────────────────────────────
-$('loginBtn').addEventListener('click', () => {
-  workerUrl = $('workerUrl').value.trim();
-  adminToken = $('adminToken').value.trim();
-  if (!workerUrl || !adminToken) { toast('請填入 Worker URL 與 Admin Token', true); return; }
-  sessionStorage.setItem('ragWorkerUrl', workerUrl);
-  sessionStorage.setItem('ragAdminToken', adminToken);
+// ── Auth (Google Sign-In with Drive scope) ───────────────────────
+function showAuthed(user) {
+  currentUser = user;
+  $('authStatus').textContent = `已登入：${user.email}`;
   $('authBlock').style.display = 'none';
   $('mainBlock').style.display = 'block';
   $('logoutBtn').style.display = 'inline-block';
   loadDocs();
-});
+}
 
-$('logoutBtn').addEventListener('click', () => {
-  sessionStorage.removeItem('ragWorkerUrl');
-  sessionStorage.removeItem('ragAdminToken');
-  workerUrl = adminToken = '';
+function showLoggedOut() {
+  currentUser = null;
+  driveAccessToken = null;
+  $('authStatus').textContent = '';
   $('authBlock').style.display = 'block';
   $('mainBlock').style.display = 'none';
   $('logoutBtn').style.display = 'none';
+}
+
+$('googleLoginBtn').addEventListener('click', async () => {
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/drive.readonly');
+    const result = await auth.signInWithPopup(provider);
+    driveAccessToken = result.credential?.accessToken || null;
+    if (!driveAccessToken) toast('未取得 Drive access token（Drive Picker 將無法使用）', true);
+    showAuthed(result.user);
+  } catch (e) {
+    toast('登入失敗：' + e.message, true);
+  }
+});
+
+$('logoutBtn').addEventListener('click', async () => {
+  await auth.signOut();
+  showLoggedOut();
+});
+
+// Restore existing Firebase session on page load (Drive token will need re-login)
+auth.onAuthStateChanged(user => {
+  if (user && !currentUser) {
+    // Session restored but no fresh Drive token — show authed, but Drive Picker will re-prompt
+    showAuthed(user);
+  } else if (!user) {
+    showLoggedOut();
+  }
 });
 
 $('refreshBtn').addEventListener('click', loadDocs);
 
-// ── Upload ────────────────────────────────────────────────────────
+// ── Upload (chunk → embed via Worker → write Firestore) ──────────
 $('uploadBtn').addEventListener('click', async () => {
   const docId = $('docId').value.trim();
   const name = $('docName').value.trim();
@@ -436,15 +470,50 @@ $('uploadBtn').addEventListener('click', async () => {
   const text = $('docText').value.trim();
   if (!docId || !name || !text) { toast('文件 ID、名稱、內容皆為必填', true); return; }
   if (!/^[\w\-]+$/.test(docId)) { toast('文件 ID 僅允許英數字、底線、連字號', true); return; }
+  if (!currentUser) { toast('請先 Google 登入', true); return; }
+
   const btn = $('uploadBtn');
   btn.disabled = true;
-  $('uploadStatus').textContent = '正在切塊並建立向量索引...';
+  const setStatus = s => $('uploadStatus').textContent = s;
+
   try {
-    const res = await api('/upload', {
-      method: 'POST',
-      body: JSON.stringify({ docId, name, product, text }),
+    const chunks = chunkText(text);
+    if (!chunks.length) throw new Error('內容切塊後為空');
+
+    // Embed each chunk sequentially (Workers AI free tier rate limit friendly)
+    const vectors = [];
+    for (let i = 0; i < chunks.length; i++) {
+      setStatus(`建立 embedding ${i + 1} / ${chunks.length}...`);
+      vectors.push(await embedText(chunks[i]));
+    }
+
+    // Write chunks to Firestore in batches of 400 (Firestore batch limit 500)
+    setStatus(`寫入 Firestore（${chunks.length} chunks）...`);
+    const serverTs = firebase.firestore.FieldValue.serverTimestamp();
+    for (let start = 0; start < chunks.length; start += 400) {
+      const batch = db.batch();
+      for (let i = start; i < Math.min(start + 400, chunks.length); i++) {
+        const ref = db.collection('rag_chunks').doc(`${docId}_${i}`);
+        batch.set(ref, {
+          docId, docName: name, chunkIndex: i,
+          product: product || 'general',
+          text: chunks[i],
+          embedding: firebase.firestore.FieldValue.vector(vectors[i]),
+          createdAt: serverTs,
+        });
+      }
+      await batch.commit();
+    }
+
+    // Write doc metadata
+    await db.collection('rag_docs').doc(docId).set({
+      name, product: product || 'general',
+      chunkCount: chunks.length,
+      uploadedAt: serverTs,
+      uploader: currentUser.email,
     });
-    toast(`✅ 已建立 ${res.chunkCount} 個向量`);
+
+    toast(`✅ 已建立 ${chunks.length} 個向量`);
     $('docText').value = '';
     $('docId').value = '';
     $('docName').value = '';
@@ -454,7 +523,7 @@ $('uploadBtn').addEventListener('click', async () => {
     toast('上傳失敗：' + e.message, true);
   } finally {
     btn.disabled = false;
-    $('uploadStatus').textContent = '';
+    setStatus('');
   }
 });
 
