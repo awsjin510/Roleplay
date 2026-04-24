@@ -357,6 +357,88 @@ $('fileInput').addEventListener('change', e => {
   if (file) handleFile(file);
   e.target.value = '';
 });
+$('localPickBtn').addEventListener('click', () => $('fileInput').click());
+
+// ── Google Drive Picker ──────────────────────────────────────────
+// Google Workspace native docs → export to these MIME types
+const DRIVE_EXPORT = {
+  'application/vnd.google-apps.document':    { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' },
+  'application/vnd.google-apps.spreadsheet': { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      ext: 'xlsx' },
+  'application/vnd.google-apps.presentation':{ mime: 'application/pdf', ext: 'pdf' },
+};
+
+let pickerApiLoaded = false;
+function loadPicker() {
+  return new Promise((resolve, reject) => {
+    if (pickerApiLoaded) return resolve();
+    gapi.load('picker', { callback: () => { pickerApiLoaded = true; resolve(); }, onerror: reject });
+  });
+}
+
+async function openDrivePicker() {
+  if (!CONFIG.pickerApiKey || !CONFIG.oauthClientId) {
+    toast('Drive Picker 尚未設定（見 CONFIG.pickerApiKey / oauthClientId）', true);
+    return;
+  }
+  if (!driveAccessToken) {
+    // Re-prompt to get a fresh Drive token (existing session may not include it)
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/drive.readonly');
+      const result = await auth.signInWithPopup(provider);
+      driveAccessToken = result.credential?.accessToken || null;
+    } catch (e) { toast('Drive 授權失敗：' + e.message, true); return; }
+  }
+  if (!driveAccessToken) { toast('無 Drive access token', true); return; }
+
+  await loadPicker();
+  const view = new google.picker.DocsView()
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setMode(google.picker.DocsViewMode.LIST);
+  const picker = new google.picker.PickerBuilder()
+    .addView(view)
+    .setOAuthToken(driveAccessToken)
+    .setDeveloperKey(CONFIG.pickerApiKey)
+    .setAppId(CONFIG.oauthClientId.split('-')[0])
+    .setCallback(async data => {
+      if (data.action !== google.picker.Action.PICKED) return;
+      const doc = data.docs[0];
+      if (!doc) return;
+      try {
+        await handleDriveFile(doc);
+      } catch (e) {
+        toast('Drive 下載 / 解析失敗：' + e.message, true);
+        dropState('', '');
+      }
+    })
+    .build();
+  picker.setVisible(true);
+}
+
+async function handleDriveFile(doc) {
+  const { id, name, mimeType } = doc;
+  dropState('parsing', `從 Drive 下載：${name}...`);
+
+  let url, filename;
+  if (DRIVE_EXPORT[mimeType]) {
+    const { mime, ext } = DRIVE_EXPORT[mimeType];
+    url = `https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=${encodeURIComponent(mime)}`;
+    filename = name + '.' + ext;
+  } else {
+    url = `https://www.googleapis.com/drive/v3/files/${id}?alt=media`;
+    filename = name;
+  }
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${driveAccessToken}` } });
+  if (!res.ok) throw new Error(`Drive HTTP ${res.status}`);
+  const blob = await res.blob();
+  // Construct a File so existing parsers work unchanged
+  const file = new File([blob], filename, { type: blob.type });
+  await handleFile(file);
+}
+
+$('drivePickBtn').addEventListener('click', openDrivePicker);
 
 // ── Docs list (from Firestore rag_docs) ─────────────────────────
 async function loadDocs() {
@@ -529,14 +611,7 @@ $('uploadBtn').addEventListener('click', async () => {
 
 // ── Init ──────────────────────────────────────────────────────────
 renderProducts();
-if (workerUrl && adminToken) {
-  $('workerUrl').value = workerUrl;
-  $('adminToken').value = adminToken;
-  $('authBlock').style.display = 'none';
-  $('mainBlock').style.display = 'block';
-  $('logoutBtn').style.display = 'inline-block';
-  loadDocs();
-}
+// onAuthStateChanged above handles post-load auth UI state
 </script>
 </body>
 </html>
