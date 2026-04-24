@@ -28,6 +28,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
@@ -231,6 +232,9 @@ try {
     });
   }
   db = firebase.firestore();
+  // Anonymous sign-in so Firestore rules allowing `request.auth != null` pass.
+  // Runs in background; no UI. RAG queries will still work once this resolves.
+  if (!firebase.auth().currentUser) firebase.auth().signInAnonymously().catch(e => console.warn('anon auth failed', e));
 } catch(e) { console.warn('Firebase init failed', e); }
 
 // Practitioner name (stored locally per device)
@@ -385,20 +389,32 @@ ${conversationLog}
 }
 
 async function queryRAG(scenario) {
-  if (!CONFIG.workerUrl || !CONFIG.appToken) return [];
+  if (!CONFIG.workerUrl || !CONFIG.appToken || !db) return [];
   const terms = [scenario.資安項目 || scenario.產品, scenario.產業, scenario.角色, scenario.情境].filter(Boolean).join(' ');
   if (!terms) return [];
   try {
-    const res = await fetch(CONFIG.workerUrl.replace(/\/$/, '') + '/query', {
+    // 1) Embed query via Worker (Workers AI bge-base-en-v1.5)
+    const embedRes = await fetch(CONFIG.workerUrl.replace(/\/$/, '') + '/embed', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'X-App-Token': CONFIG.appToken },
-      body: JSON.stringify({ query: terms, topK: 5 }),
+      body: JSON.stringify({ text: terms }),
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.matches || []).map(m => m.text).filter(Boolean);
-  } catch { return []; }
+    if (!embedRes.ok) return [];
+    const { values } = await embedRes.json();
+    if (!values || !Array.isArray(values)) return [];
+
+    // 2) Firestore native vector search (requires auth + composite vector index on `embedding`)
+    const snap = await db.collection('rag_chunks').findNearest(
+      'embedding',
+      firebase.firestore.FieldValue.vector(values),
+      { limit: 5, distanceMeasure: 'COSINE' }
+    ).get();
+    return snap.docs.map(d => d.data().text).filter(Boolean);
+  } catch (e) {
+    console.warn('queryRAG failed', e);
+    return [];
+  }
 }
 
 async function sendMessage(conversationHistory, systemPrompt, maxTokens=1000) {
