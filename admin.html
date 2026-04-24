@@ -8,6 +8,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- Firebase (compat SDK, same version as roleplay-ai.html) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Google API client + Picker loader -->
+<script src="https://apis.google.com/js/api.js"></script>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -93,13 +99,11 @@
 
   <div class="card" id="authBlock">
     <h2>1. 管理員登入</h2>
-    <label>Worker URL</label>
-    <input id="workerUrl" placeholder="https://sales-roleplay-worker.your-subdomain.workers.dev">
-    <label>Admin Token</label>
-    <input id="adminToken" type="password" placeholder="ADMIN_TOKEN">
-    <div style="margin-top:12px; display:flex; gap:8px;">
-      <button id="loginBtn">進入</button>
+    <p class="muted" style="margin:0 0 10px 0">請以白名單內的 Google 帳號登入。登入時會請求 Google Drive 讀取權限，用於之後「從 Drive 選取檔案」。</p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button id="googleLoginBtn">🔐 使用 Google 登入</button>
       <button class="ghost" id="logoutBtn" style="display:none">登出</button>
+      <span class="muted" id="authStatus"></span>
     </div>
   </div>
 
@@ -107,11 +111,16 @@
     <div class="card">
       <h2>2. 上傳文件</h2>
 
-      <!-- Drop zone -->
+      <!-- Source: Drive Picker or local file -->
+      <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <button id="drivePickBtn" type="button">📁 從 Google Drive 選取</button>
+        <button class="ghost" id="localPickBtn" type="button">💻 從本機選取</button>
+      </div>
+      <!-- Drop zone (local file fallback) -->
       <div id="dropZone">
         <div class="icon">📂</div>
-        <div class="hint">拖曳檔案到這裡，或 <b>點擊選擇檔案</b></div>
-        <div class="formats">支援：PDF、Word（.docx）、Excel（.xlsx / .xls / .csv）、純文字（.txt / .md）</div>
+        <div class="hint">拖曳檔案到這裡，或按上方按鈕</div>
+        <div class="formats">支援：PDF、Word（.docx）、Excel（.xlsx / .xls / .csv）、純文字（.txt / .md）、Google Docs / Sheets / Slides</div>
         <div class="hint" id="dropStatus" style="margin-top:8px"></div>
       </div>
       <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md">
@@ -159,14 +168,37 @@
 <script>
 const PRODUCTS = ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"];
 
+// ── CONFIG (外部服務端點，部署後填入) ─────────────────────────────
+const CONFIG = {
+  workerUrl: '',         // Cloudflare Worker URL e.g. https://xxx.workers.dev
+  appToken: '',          // Worker /embed 驗證用 token
+  oauthClientId: '',     // Google OAuth 2.0 Web Client ID (xxxxx.apps.googleusercontent.com)
+  pickerApiKey: '',      // Google API Key (restricted to Picker API)
+};
+
+const FIREBASE_CFG = {
+  apiKey: "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
+  authDomain: "roleplay-training.firebaseapp.com",
+  projectId: "roleplay-training",
+  storageBucket: "roleplay-training.firebasestorage.app",
+  messagingSenderId: "759367183812",
+  appId: "1:759367183812:web:595bfc7e19c40344d58891",
+};
+
+if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Drive access token (obtained from Google sign-in popup credentials)
+let driveAccessToken = null;
+let currentUser = null;
+
 // Set pdf.js worker
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
 const $ = id => document.getElementById(id);
-let workerUrl = sessionStorage.getItem('ragWorkerUrl') || '';
-let adminToken = sessionStorage.getItem('ragAdminToken') || '';
 
 function toast(msg, isErr) {
   const t = document.createElement('div');
@@ -176,19 +208,41 @@ function toast(msg, isErr) {
   setTimeout(() => t.remove(), 3500);
 }
 
-function api(path, opts = {}) {
-  return fetch(workerUrl.replace(/\/$/, '') + path, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Admin-Token': adminToken,
-      ...(opts.headers || {}),
-    },
-  }).then(async r => {
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-    return data;
+// Call Worker /embed to get a 768-dim vector for given text
+async function embedText(text) {
+  if (!CONFIG.workerUrl || !CONFIG.appToken) throw new Error('Worker URL 或 APP_TOKEN 未設定（見 CONFIG）');
+  const res = await fetch(CONFIG.workerUrl.replace(/\/$/, '') + '/embed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-App-Token': CONFIG.appToken },
+    body: JSON.stringify({ text }),
   });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Embed HTTP ${res.status}`);
+  return data.values;
+}
+
+// Client-side chunking (was in worker.js, now here)
+function chunkText(text, maxChars = 800, overlap = 100) {
+  const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  const chunks = [];
+  let current = '';
+  for (const para of paragraphs) {
+    const joined = current ? current + '\n\n' + para : para;
+    if (joined.length > maxChars && current) {
+      chunks.push(current.trim());
+      const tail = current.length > overlap ? current.slice(-overlap) : current;
+      current = tail + '\n\n' + para;
+    } else {
+      current = joined;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  const final = [];
+  for (const c of chunks) {
+    if (c.length <= maxChars * 1.5) { final.push(c); continue; }
+    for (let i = 0; i < c.length; i += maxChars - overlap) final.push(c.slice(i, i + maxChars));
+  }
+  return final;
 }
 
 function renderProducts() {
