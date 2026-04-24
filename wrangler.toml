@@ -2,24 +2,10 @@ name = "sales-roleplay-worker"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# Vectorize index for RAG embeddings
-# Create via: npx wrangler vectorize create sales-rag-index --dimensions=768 --metric=cosine
-[[vectorize]]
-binding = "VECTORIZE"
-index_name = "sales-rag-index"
-
 # Workers AI for embeddings (@cf/baai/bge-base-en-v1.5, 768-dim)
 [ai]
 binding = "AI"
 
-# KV namespace for per-document metadata
-# Create via: npx wrangler kv:namespace create DOC_META
-# Paste the returned id below.
-[[kv_namespaces]]
-binding = "DOC_META"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-
-# Secrets (set via `npx wrangler secret put <NAME>` or Cloudflare Dashboard):
+# Secrets (set via `npx wrangler secret put <NAME>`):
 #   ANTHROPIC_API_KEY  Anthropic API key for /chat proxy
-#   APP_TOKEN          Token sent by roleplay-ai.html as X-App-Token
-#   ADMIN_TOKEN        Token used by admin.html as X-Admin-Token
+#   APP_TOKEN          Token sent as X-App-Token by admin.html and roleplay-ai.html
