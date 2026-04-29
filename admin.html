@@ -20,8 +20,10 @@
   // Surface module-script errors to the user so we can diagnose CDN / import issues.
   window._modError = null;
   try {
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const fs = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    // 10.12.0 ships vector() as a preview symbol that's not in the public ESM exports.
+    // Bump modular SDK to 11.x where vector() and findNearest() are GA.
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js');
+    const fs = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js');
     const { getFirestore, vector, writeBatch, doc, setDoc, serverTimestamp } = fs;
     if (typeof vector !== 'function') {
       throw new Error('vector() not exported from firebase-firestore.js — got: ' + typeof vector);

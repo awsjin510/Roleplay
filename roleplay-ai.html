@@ -32,10 +32,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- Modular Firestore SDK — independent 'mod' app, same project config as compat default app. -->
 <script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  // 10.12.0 doesn't export vector()/findNearest() publicly; use 11.x where they're GA.
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
   import {
     getFirestore, vector, query, collection, findNearest, getDocs,
-  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 
   const app = initializeApp({
     apiKey:            "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
