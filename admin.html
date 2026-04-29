@@ -595,14 +595,26 @@ $('googleLoginBtn').addEventListener('click', async () => {
     // Drive scope is handled separately via GIS token client when Picker is opened,
     // so we don't request it here — avoids the sensitive-scope 403 on login.
     const result = await auth.signInWithPopup(provider);
+
     // Mirror the sign-in into the modular 'mod' app so Firestore vector writes
-    // carry an auth token (Firestore rules require request.auth != null).
-    if (window._mod && result.credential) {
+    // carry an auth token. credentialFromResult() is the documented way to get
+    // the OAuthCredential (result.credential is sometimes stripped on re-auth).
+    const cred = firebase.auth.GoogleAuthProvider.credentialFromResult(result) || result.credential;
+    console.log('[_mod] credential:', cred && {
+      hasIdToken: !!cred.idToken,
+      hasAccessToken: !!cred.accessToken,
+      providerId: cred.providerId,
+    });
+    if (window._mod && cred && (cred.idToken || cred.accessToken)) {
       try {
-        await window._mod.signInWithGoogle(result.credential.idToken, result.credential.accessToken);
+        await window._mod.signInWithGoogle(cred.idToken, cred.accessToken);
       } catch (e) {
-        console.warn('[_mod] mirror sign-in failed', e);
+        console.error('[_mod] mirror sign-in failed', e);
+        toast('登入鏡像失敗：' + (e.message || e), true);
       }
+    } else {
+      console.warn('[_mod] no credential to mirror — modular app will be unauthenticated');
+      toast('未取得 Google credential — 寫入會被 Firestore 規則擋下', true);
     }
     showAuthed(result.user);
   } catch (e) {
