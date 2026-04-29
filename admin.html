@@ -13,27 +13,26 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- Modular Firestore SDK — needed for vector() which is absent from the compat bundle.
-     Shares the same app instance initialised by the compat SDK above. -->
+     Compat and modular bundles have separate app registries (different JS closures), so
+     we initialise an independent modular app ('mod') with the same project config rather
+     than trying to share the compat default app. Both point at the same Firestore DB. -->
 <script type="module">
-  import { getApp }    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import {
     getFirestore, vector, writeBatch, doc, setDoc, serverTimestamp,
-    collection, query, orderBy, getDocs, deleteDoc,
-    findNearest,
   } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-  // Compat SDK initialises the app synchronously via its own <script>; poll until ready.
-  await new Promise((resolve, reject) => {
-    let n = 0;
-    const t = setInterval(() => {
-      try { getApp(); clearInterval(t); resolve(); }
-      catch { if (++n > 200) { clearInterval(t); reject(new Error('Firebase app timeout')); } }
-    }, 25);
-  });
+  const app = initializeApp({
+    apiKey:            "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
+    authDomain:        "roleplay-training.firebaseapp.com",
+    projectId:         "roleplay-training",
+    storageBucket:     "roleplay-training.firebasestorage.app",
+    messagingSenderId: "759367183812",
+    appId:             "1:759367183812:web:595bfc7e19c40344d58891",
+  }, 'mod');
 
-  const mdb = getFirestore(getApp());
+  const mdb = getFirestore(app);
 
-  // Expose helpers used by the upload function
   window._mod = {
     vector,
     serverTimestamp,

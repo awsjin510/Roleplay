@@ -30,22 +30,23 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- Modular Firestore SDK for vector() and findNearest(), absent from the compat bundle. -->
+<!-- Modular Firestore SDK — independent 'mod' app, same project config as compat default app. -->
 <script type="module">
-  import { getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import {
     getFirestore, vector, query, collection, findNearest, getDocs,
   } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-  await new Promise((resolve, reject) => {
-    let n = 0;
-    const t = setInterval(() => {
-      try { getApp(); clearInterval(t); resolve(); }
-      catch { if (++n > 200) { clearInterval(t); reject(new Error('Firebase app timeout')); } }
-    }, 25);
-  });
+  const app = initializeApp({
+    apiKey:            "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
+    authDomain:        "roleplay-training.firebaseapp.com",
+    projectId:         "roleplay-training",
+    storageBucket:     "roleplay-training.firebasestorage.app",
+    messagingSenderId: "759367183812",
+    appId:             "1:759367183812:web:595bfc7e19c40344d58891",
+  }, 'mod');
 
-  const mdb = getFirestore(getApp());
+  const mdb = getFirestore(app);
   window._mod = {
     findNearest: (field, values, opts) =>
       getDocs(query(collection(mdb, 'rag_chunks'), findNearest(field, vector(values), opts))),
