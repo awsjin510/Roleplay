@@ -77,15 +77,13 @@ const CONFIG = {
 // DATA
 // ============================================================
 const SLOT_DATA = {
-  產品: { icon: "🎁", items: ["資安產品","資安服務","MDR","SOC","MSSP","雲端服務","CMSP","IDC","CDN"] },
+  產品服務: { icon: "🎯", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP","資安服務","MDR","SOC","MSSP","雲端服務","CMSP","IDC","CDN"] },
   產業: { icon: "🏢", items: ["遊戲產業","電商平台","零售品牌","連鎖餐飲","製造業","傳統工廠","醫療院所","生技公司","金融機構","保險公司","行銷公司","廣告代理商","SI系統整合商","政府機關","新創公司"] },
   角色: { icon: "🧑‍💼", items: ["總機","行政助理","IT窗口","MIS工程師","IT主管","資訊長(CIO)","採購","PM專案經理","技術主管","部門主管","老闆","營運主管"] },
   情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
   難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
-  雲端環境: { icon: "☁️", items: ["AWS", "GCP", "Azure", "本地機房", "混合雲"] },
-  資安項目: { icon: "🔒", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"] },
 };
-const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境' && c !== '資安項目');
+const BASE_CATEGORIES = Object.keys(SLOT_DATA);
 const ALL_CATEGORIES = Object.keys(SLOT_DATA);
 
 const roleProfiles = {
@@ -363,9 +361,9 @@ function buildSystemPrompt(scenario, ragChunks = []) {
   const difficulty = difficultyBehaviors[scenario.難度] || '';
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
   const cloudNote = cloudEnv ? `你目前使用 ${scenario.雲端環境}，偶爾可以自然帶到相關經驗，但不要每輪都問雲端問題。` : '';
-  const secProd = securityProductProfiles[scenario.資安項目];
+  const secProd = securityProductProfiles[scenario.產品服務];
   const secNote = secProd ? `
-業務這次介紹的具體產品是「${scenario.資安項目}」（${secProd.category}）。
+業務這次介紹的具體產品是「${scenario.產品服務}」（${secProd.category}）。
 你對這個產品已有基本認知：${secProd.description}
 你在意的具體問題點：${secProd.keyPoints}。
 重要：你已經知道這個產品是什麼、大概怎麼運作，所以不要問「這個產品是什麼」或「怎麼運作」這類基礎問題。你應該問的是：這個產品能不能解決你的特定狀況、如何整合進你現有環境、實際導入案例、費用結構等具體業務問題。也不要問這個產品明顯不支援的平台或功能（例如 appGuard 只支援 Android/iOS，就不要問能不能保護 Windows 桌機）。` : '';
@@ -408,7 +406,7 @@ ${difficulty ? `你的風格特色：${difficulty}` : ''}
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
   return `你是資深銷售培訓教練，請覆盤以下角色扮演練習。
 
-情境：業務${scenario.業務}向${scenario.產業}的${scenario.角色}推銷${scenario.產品}，客戶情境「${scenario.情境}」，難度「${scenario.難度}」。
+情境：業務${scenario.業務}向${scenario.產業}的${scenario.角色}推銷${scenario.產品服務}，客戶情境「${scenario.情境}」，難度「${scenario.難度}」。
 
 指標變化：${JSON.stringify(metricsHistory)}
 
@@ -421,7 +419,7 @@ ${conversationLog}
 
 async function queryRAG(scenario) {
   if (!CONFIG.workerUrl || !CONFIG.appToken || !db) return [];
-  const terms = [scenario.資安項目 || scenario.產品, scenario.產業, scenario.角色, scenario.情境].filter(Boolean).join(' ');
+  const terms = [scenario.產品服務, scenario.產業, scenario.角色, scenario.情境].filter(Boolean).join(' ');
   if (!terms) return [];
   try {
     // 1) Embed query via Worker (Workers AI bge-base-en-v1.5)
@@ -610,24 +608,10 @@ function SetupPhase({ onStart }) {
   const [selections, setSelections] = useState({});
   const [triggers, setTriggers] = useState(()=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0])));
 
-  const isCloudProduct = selections.產品 === '雲端服務';
-  const isSecurityProduct = selections.產品 === '資安產品';
-  const requiredCats = [
-    ...BASE_CATEGORIES,
-    ...(isCloudProduct ? ['雲端環境'] : []),
-    ...(isSecurityProduct ? ['資安項目'] : []),
-  ];
-  const allSpun = requiredCats.every(c => selections[c] !== undefined);
+  const allSpun = BASE_CATEGORIES.every(c => selections[c] !== undefined);
 
   const handleDone = useCallback((cat, val) => {
-    setSelections(p => {
-      const next = {...p, [cat]: val};
-      if (cat === '產品') {
-        if (val !== '雲端服務') delete next['雲端環境'];
-        if (val !== '資安產品') delete next['資安項目'];
-      }
-      return next;
-    });
+    setSelections(p => ({ ...p, [cat]: val }));
   }, []);
   const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,p[c]+1]))); };
   const reset = ()=>{ setSelections({}); setTriggers(Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0]))); };
@@ -645,34 +629,6 @@ function SetupPhase({ onStart }) {
           <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} wide={cat==='難度'}/>
         ))}
       </div>
-      {isCloudProduct&&(
-        <div style={{animation:'fadeInUp 0.35s ease'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(6,182,212,0.4))'}}/>
-            <span style={{color:'#67e8f9',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>☁️ 雲端環境（產品為雲端服務時啟用）</span>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(6,182,212,0.4),transparent)'}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'center'}}>
-            <div style={{width:160}}>
-              <SlotColumn key="雲端環境" category="雲端環境" data={SLOT_DATA['雲端環境']} onSpinComplete={handleDone} spinTrigger={triggers['雲端環境']}/>
-            </div>
-          </div>
-        </div>
-      )}
-      {isSecurityProduct&&(
-        <div style={{animation:'fadeInUp 0.35s ease'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(239,68,68,0.4))'}}/>
-            <span style={{color:'#fca5a5',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>🔒 資安項目（產品為資安產品時啟用）</span>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(239,68,68,0.4),transparent)'}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'center'}}>
-            <div style={{width:200}}>
-              <SlotColumn key="資安項目" category="資安項目" data={SLOT_DATA['資安項目']} onSpinComplete={handleDone} spinTrigger={triggers['資安項目']}/>
-            </div>
-          </div>
-        </div>
-      )}
       <div style={{display:'flex',gap:10,justifyContent:'center'}}>
         <button onClick={spinAll} style={{padding:'13px 32px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:15,cursor:'pointer',boxShadow:'0 0 28px rgba(99,102,241,0.4)'}}>🎰 全部轉！</button>
         <button onClick={reset} style={{padding:'13px 22px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.7)',fontWeight:600,fontSize:14,cursor:'pointer'}}>🔄 重置</button>
@@ -685,10 +641,10 @@ function SetupPhase({ onStart }) {
               <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>👤 業務</span>
               <span style={{color:'#a5b4fc',fontWeight:700}}>{getUserName()||'我'}</span>
             </div>
-            {requiredCats.map(cat=>(
-              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='雲端環境'?'rgba(6,182,212,0.3)':'rgba(255,255,255,0.1)'}`,borderRadius:10,padding:'7px 13px',fontSize:12}}>
+            {BASE_CATEGORIES.map(cat=>(
+              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'7px 13px',fontSize:12}}>
                 <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>{SLOT_DATA[cat].icon} {cat}</span>
-                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
+                <span style={{color:cat==='難度'?'#fca5a5':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
               </div>
             ))}
           </div>

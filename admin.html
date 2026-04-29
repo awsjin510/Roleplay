@@ -177,7 +177,11 @@ import {
   query, where, orderBy, writeBatch, serverTimestamp, vector,
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 
-const PRODUCTS = ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"];
+const PRODUCTS = [
+  { group: "具體產品", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"] },
+  { group: "服務類別", items: ["資安服務","MDR","SOC","MSSP","雲端服務","CMSP","IDC","CDN"] },
+];
+const ALL_PRODUCTS = PRODUCTS.flatMap(g => g.items);
 
 // ── CONFIG (外部服務端點，部署後填入) ─────────────────────────────
 const CONFIG = {
@@ -258,10 +262,15 @@ function chunkText(text, maxChars = 800, overlap = 100) {
 
 function renderProducts() {
   const sel = $('docProduct');
-  PRODUCTS.forEach(p => {
-    const o = document.createElement('option');
-    o.value = p; o.textContent = p;
-    sel.appendChild(o);
+  PRODUCTS.forEach(({ group, items }) => {
+    const grp = document.createElement('optgroup');
+    grp.label = group;
+    items.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      grp.appendChild(o);
+    });
+    sel.appendChild(grp);
   });
 }
 
@@ -273,7 +282,7 @@ function nameToId(filename) {
 
 function guessProduct(filename) {
   const lower = filename.toLowerCase();
-  return PRODUCTS.find(p => lower.includes(p.toLowerCase())) || null;
+  return ALL_PRODUCTS.find(p => lower.includes(p.toLowerCase())) || null;
 }
 
 // ── Parsers ─────────────────────────────────────────────────────
