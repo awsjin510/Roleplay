@@ -12,6 +12,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- vector() lives only in the modular SDK; bridge it to window for compat code -->
+<script type="module">
+  import { vector } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  window._fsVector = vector;
+</script>
 <!-- Google API client + Picker loader -->
 <script src="https://apis.google.com/js/api.js"></script>
 <!-- Google Identity Services (GIS) — token client for Drive scope -->
@@ -595,6 +600,7 @@ $('uploadBtn').addEventListener('click', async () => {
 
     // Write chunks to Firestore in batches of 400 (Firestore batch limit 500)
     setStatus(`寫入 Firestore（${chunks.length} chunks）...`);
+    if (!window._fsVector) { toast('頁面尚未就緒，請重新整理後再試', true); return; }
     const serverTs = firebase.firestore.FieldValue.serverTimestamp();
     for (let start = 0; start < chunks.length; start += 400) {
       const batch = db.batch();
@@ -604,7 +610,7 @@ $('uploadBtn').addEventListener('click', async () => {
           docId, docName: name, chunkIndex: i,
           product: product || 'general',
           text: chunks[i],
-          embedding: firebase.firestore.FieldValue.vector(vectors[i]),
+          embedding: window._fsVector(vectors[i]),
           createdAt: serverTs,
         });
       }

@@ -30,6 +30,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- vector() lives only in the modular SDK; bridge it to window for compat code -->
+<script type="module">
+  import { vector } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  window._fsVector = vector;
+</script>
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
 
@@ -407,7 +412,7 @@ async function queryRAG(scenario) {
     // 2) Firestore native vector search (requires auth + composite vector index on `embedding`)
     const snap = await db.collection('rag_chunks').findNearest(
       'embedding',
-      firebase.firestore.FieldValue.vector(values),
+      window._fsVector(values),
       { limit: 5, distanceMeasure: 'COSINE' }
     ).get();
     return snap.docs.map(d => d.data().text).filter(Boolean);
