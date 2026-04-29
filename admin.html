@@ -14,6 +14,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- Google API client + Picker loader -->
 <script src="https://apis.google.com/js/api.js"></script>
+<!-- Google Identity Services (GIS) — token client for Drive scope -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -99,7 +101,7 @@
 
   <div class="card" id="authBlock">
     <h2>1. 管理員登入</h2>
-    <p class="muted" style="margin:0 0 10px 0">請以白名單內的 Google 帳號登入。登入時會請求 Google Drive 讀取權限，用於之後「從 Drive 選取檔案」。</p>
+    <p class="muted" style="margin:0 0 10px 0">請以白名單內的 Google 帳號登入。點選「從 Google Drive 選取」時會另行請求 Drive 讀取授權。</p>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <button id="googleLoginBtn">🔐 使用 Google 登入</button>
       <button class="ghost" id="logoutBtn" style="display:none">登出</button>
@@ -189,7 +191,7 @@ if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Drive access token (obtained from Google sign-in popup credentials)
+// Drive access token (obtained via GIS token client when Picker is first opened)
 let driveAccessToken = null;
 let currentUser = null;
 
@@ -375,21 +377,44 @@ function loadPicker() {
   });
 }
 
+// Use GIS token client to get Drive access token separately from Firebase auth.
+// drive.readonly is a sensitive scope — requesting it via Firebase signInWithPopup
+// triggers a full OAuth consent screen that returns 403 when the project's consent
+// screen is in Testing mode. GIS token client uses the Picker OAuth client directly.
+let _gisTokenClient = null;
+function requestDriveToken() {
+  return new Promise((resolve, reject) => {
+    if (driveAccessToken) return resolve(driveAccessToken);
+    if (!window.google?.accounts?.oauth2) {
+      return reject(new Error('GIS library not loaded — please refresh the page'));
+    }
+    if (!_gisTokenClient) {
+      _gisTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.oauthClientId,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: resp => {
+          if (resp.error) return reject(new Error(resp.error_description || resp.error));
+          driveAccessToken = resp.access_token;
+          // Clear cached token a minute before expiry so next click re-prompts silently
+          setTimeout(() => { driveAccessToken = null; }, (Number(resp.expires_in) - 60) * 1000);
+          resolve(driveAccessToken);
+        },
+        error_callback: err => reject(new Error(err.message || err.type)),
+      });
+    }
+    // prompt: '' = silent reuse if already consented; falls back to consent UI if needed
+    _gisTokenClient.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
+  });
+}
+
 async function openDrivePicker() {
   if (!CONFIG.pickerApiKey || !CONFIG.oauthClientId) {
     toast('Drive Picker 尚未設定（見 CONFIG.pickerApiKey / oauthClientId）', true);
     return;
   }
-  if (!driveAccessToken) {
-    // Re-prompt to get a fresh Drive token (existing session may not include it)
-    try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      provider.addScope('https://www.googleapis.com/auth/drive.readonly');
-      const result = await auth.signInWithPopup(provider);
-      driveAccessToken = result.credential?.accessToken || null;
-    } catch (e) { toast('Drive 授權失敗：' + e.message, true); return; }
-  }
-  if (!driveAccessToken) { toast('無 Drive access token', true); return; }
+  try {
+    await requestDriveToken();
+  } catch (e) { toast('Drive 授權失敗：' + e.message, true); return; }
 
   await loadPicker();
   const view = new google.picker.DocsView()
@@ -495,7 +520,7 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ── Auth (Google Sign-In with Drive scope) ───────────────────────
+// ── Auth (Google Sign-In — Drive scope handled separately via GIS) ──
 function showAuthed(user) {
   currentUser = user;
   $('authStatus').textContent = `已登入：${user.email}`;
@@ -517,10 +542,9 @@ function showLoggedOut() {
 $('googleLoginBtn').addEventListener('click', async () => {
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/drive.readonly');
+    // Drive scope is handled separately via GIS token client when Picker is opened,
+    // so we don't request it here — avoids the sensitive-scope 403 on login.
     const result = await auth.signInWithPopup(provider);
-    driveAccessToken = result.credential?.accessToken || null;
-    if (!driveAccessToken) toast('未取得 Drive access token（Drive Picker 將無法使用）', true);
     showAuthed(result.user);
   } catch (e) {
     toast('登入失敗：' + e.message, true);
