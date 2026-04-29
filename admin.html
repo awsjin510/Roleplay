@@ -8,60 +8,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<!-- Firebase (compat SDK, same version as roleplay-ai.html) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- Modular Firestore SDK — needed for vector() which is absent from the compat bundle.
-     Compat and modular bundles have separate app registries (different JS closures), so
-     we initialise an independent modular app ('mod') with the same project config rather
-     than trying to share the compat default app. Both point at the same Firestore DB. -->
-<script type="module">
-  // Surface module-script errors to the user so we can diagnose CDN / import issues.
-  window._modError = null;
-  try {
-    // 10.12.0 ships vector() as a preview symbol that's not in the public ESM exports.
-    // Bump modular SDK to 11.x where vector() and findNearest() are GA.
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js');
-    const fs = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js');
-    const fa = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js');
-    const { getFirestore, vector, writeBatch, doc, setDoc, serverTimestamp } = fs;
-    const { getAuth, signInWithCredential, GoogleAuthProvider } = fa;
-    if (typeof vector !== 'function') {
-      throw new Error('vector() not exported from firebase-firestore.js — got: ' + typeof vector);
-    }
-    const app = initializeApp({
-      apiKey:            "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
-      authDomain:        "roleplay-training.firebaseapp.com",
-      projectId:         "roleplay-training",
-      storageBucket:     "roleplay-training.firebasestorage.app",
-      messagingSenderId: "759367183812",
-      appId:             "1:759367183812:web:595bfc7e19c40344d58891",
-    }, 'mod');
-    const mdb = getFirestore(app);
-    const mauth = getAuth(app);
-    window._mod = {
-      vector,
-      serverTimestamp,
-      batch:  ()          => writeBatch(mdb),
-      doc:    (col, id)   => doc(mdb, col, id),
-      setDoc: (ref, data) => setDoc(ref, data),
-      // Sign the modular 'mod' app in with the same Google credential the compat
-      // SDK got from signInWithPopup, so Firestore writes carry an auth token.
-      signInWithGoogle: async (idToken, accessToken) => {
-        const cred = GoogleAuthProvider.credential(idToken || null, accessToken || null);
-        const r = await signInWithCredential(mauth, cred);
-        console.log('[_mod] signed in:', r.user.email);
-        return r.user;
-      },
-      currentUser: () => mauth.currentUser,
-    };
-    console.log('[_mod] modular Firestore loaded OK');
-  } catch (e) {
-    window._modError = e;
-    console.error('[_mod] failed to load modular Firestore:', e);
-  }
-</script>
 <!-- Google API client + Picker loader -->
 <script src="https://apis.google.com/js/api.js"></script>
 <!-- Google Identity Services (GIS) — token client for Drive scope -->
@@ -217,7 +163,20 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+// ══════════════════════════════════════════════════════════════════
+// Firebase modular SDK (single app, single auth, single Firestore).
+// vector() and findNearest() became GA in 11.x; staying on 11.6.0.
+// ══════════════════════════════════════════════════════════════════
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+import {
+  getFirestore, collection, doc, getDocs, setDoc, deleteDoc,
+  query, where, orderBy, writeBatch, serverTimestamp, vector,
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+
 const PRODUCTS = ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"];
 
 // ── CONFIG (外部服務端點，部署後填入) ─────────────────────────────
@@ -237,9 +196,9 @@ const FIREBASE_CFG = {
   appId: "1:759367183812:web:595bfc7e19c40344d58891",
 };
 
-if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CFG);
-const auth = firebase.auth();
-const db = firebase.firestore();
+const app  = initializeApp(FIREBASE_CFG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
 
 // Drive access token (obtained via GIS token client when Picker is first opened)
 let driveAccessToken = null;
@@ -273,7 +232,7 @@ async function embedText(text) {
   return data.values;
 }
 
-// Client-side chunking (was in worker.js, now here)
+// Client-side chunking
 function chunkText(text, maxChars = 800, overlap = 100) {
   const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   const chunks = [];
@@ -379,10 +338,8 @@ async function handleFile(file) {
   try {
     const text = await parseFile(file);
     $('docText').value = text;
-    // auto-fill ID and name if empty
     if (!$('docId').value) $('docId').value = nameToId(file.name);
     if (!$('docName').value) $('docName').value = file.name.replace(/\.[^.]+$/, '');
-    // auto-select product if guessable
     const p = guessProduct(file.name);
     if (p) $('docProduct').value = p;
     const words = text.split(/\s+/).length;
@@ -412,7 +369,6 @@ $('fileInput').addEventListener('change', e => {
 $('localPickBtn').addEventListener('click', () => $('fileInput').click());
 
 // ── Google Drive Picker ──────────────────────────────────────────
-// Google Workspace native docs → export to these MIME types
 const DRIVE_EXPORT = {
   'application/vnd.google-apps.document':    { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' },
   'application/vnd.google-apps.spreadsheet': { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      ext: 'xlsx' },
@@ -427,10 +383,6 @@ function loadPicker() {
   });
 }
 
-// Use GIS token client to get Drive access token separately from Firebase auth.
-// drive.readonly is a sensitive scope — requesting it via Firebase signInWithPopup
-// triggers a full OAuth consent screen that returns 403 when the project's consent
-// screen is in Testing mode. GIS token client uses the Picker OAuth client directly.
 let _gisTokenClient = null;
 function requestDriveToken() {
   return new Promise((resolve, reject) => {
@@ -445,14 +397,12 @@ function requestDriveToken() {
         callback: resp => {
           if (resp.error) return reject(new Error(resp.error_description || resp.error));
           driveAccessToken = resp.access_token;
-          // Clear cached token a minute before expiry so next click re-prompts silently
           setTimeout(() => { driveAccessToken = null; }, (Number(resp.expires_in) - 60) * 1000);
           resolve(driveAccessToken);
         },
         error_callback: err => reject(new Error(err.message || err.type)),
       });
     }
-    // prompt: '' = silent reuse if already consented; falls back to consent UI if needed
     _gisTokenClient.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
   });
 }
@@ -478,10 +428,10 @@ async function openDrivePicker() {
     .setAppId(CONFIG.oauthClientId.split('-')[0])
     .setCallback(async data => {
       if (data.action !== google.picker.Action.PICKED) return;
-      const doc = data.docs[0];
-      if (!doc) return;
+      const driveDoc = data.docs[0];
+      if (!driveDoc) return;
       try {
-        await handleDriveFile(doc);
+        await handleDriveFile(driveDoc);
       } catch (e) {
         toast('Drive 下載 / 解析失敗：' + e.message, true);
         dropState('', '');
@@ -491,8 +441,8 @@ async function openDrivePicker() {
   picker.setVisible(true);
 }
 
-async function handleDriveFile(doc) {
-  const { id, name, mimeType } = doc;
+async function handleDriveFile(driveDoc) {
+  const { id, name, mimeType } = driveDoc;
   dropState('parsing', `從 Drive 下載：${name}...`);
 
   let url, filename;
@@ -508,7 +458,6 @@ async function handleDriveFile(doc) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${driveAccessToken}` } });
   if (!res.ok) throw new Error(`Drive HTTP ${res.status}`);
   const blob = await res.blob();
-  // Construct a File so existing parsers work unchanged
   const file = new File([blob], filename, { type: blob.type });
   await handleFile(file);
 }
@@ -519,28 +468,28 @@ $('drivePickBtn').addEventListener('click', openDrivePicker);
 async function loadDocs() {
   $('docsTbody').innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">載入中...</td></tr>';
   try {
-    const snap = await db.collection('rag_docs').orderBy('uploadedAt', 'desc').get();
+    const snap = await getDocs(query(collection(db, 'rag_docs'), orderBy('uploadedAt', 'desc')));
     const tbody = $('docsTbody');
     tbody.innerHTML = '';
     $('docsEmpty').style.display = snap.empty ? 'block' : 'none';
-    snap.forEach(doc => {
-      const d = doc.data();
+    snap.forEach(docSnap => {
+      const d = docSnap.data();
       const tr = document.createElement('tr');
       const when = d.uploadedAt?.toDate ? d.uploadedAt.toDate().toLocaleString('zh-TW')
         : (d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('zh-TW') : '-');
       tr.innerHTML = `
-        <td>${escapeHtml(d.name || doc.id)}</td>
-        <td><code style="font-size:12px;color:rgba(255,255,255,0.55)">${escapeHtml(doc.id)}</code></td>
+        <td>${escapeHtml(d.name || docSnap.id)}</td>
+        <td><code style="font-size:12px;color:rgba(255,255,255,0.55)">${escapeHtml(docSnap.id)}</code></td>
         <td><span class="pill">${escapeHtml(d.product || 'general')}</span></td>
         <td>${d.chunkCount || 0}</td>
         <td class="muted">${when}</td>
         <td><span class="pill ok">ready</span></td>
-        <td><button class="danger" data-id="${escapeHtml(doc.id)}">刪除</button></td>
+        <td><button class="danger" data-id="${escapeHtml(docSnap.id)}">刪除</button></td>
       `;
       tbody.appendChild(tr);
     });
     tbody.querySelectorAll('button.danger').forEach(b => {
-      b.addEventListener('click', () => deleteDoc(b.dataset.id));
+      b.addEventListener('click', () => deleteDocById(b.dataset.id));
     });
   } catch (e) {
     $('docsTbody').innerHTML = '';
@@ -548,17 +497,16 @@ async function loadDocs() {
   }
 }
 
-async function deleteDoc(id) {
+async function deleteDocById(id) {
   if (!confirm(`確定刪除「${id}」？此動作無法復原。`)) return;
   try {
-    // delete all chunks with this docId (max 500 per batch)
-    const snap = await db.collection('rag_chunks').where('docId', '==', id).get();
+    const snap = await getDocs(query(collection(db, 'rag_chunks'), where('docId', '==', id)));
     if (!snap.empty) {
-      const batch = db.batch();
+      const batch = writeBatch(db);
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
     }
-    await db.collection('rag_docs').doc(id).delete();
+    await deleteDoc(doc(db, 'rag_docs', id));
     toast(`已刪除（${snap.size} chunks）`);
     loadDocs();
   } catch (e) {
@@ -591,31 +539,8 @@ function showLoggedOut() {
 
 $('googleLoginBtn').addEventListener('click', async () => {
   try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    // Drive scope is handled separately via GIS token client when Picker is opened,
-    // so we don't request it here — avoids the sensitive-scope 403 on login.
-    const result = await auth.signInWithPopup(provider);
-
-    // Mirror the sign-in into the modular 'mod' app so Firestore vector writes
-    // carry an auth token. credentialFromResult() is the documented way to get
-    // the OAuthCredential (result.credential is sometimes stripped on re-auth).
-    const cred = firebase.auth.GoogleAuthProvider.credentialFromResult(result) || result.credential;
-    console.log('[_mod] credential:', cred && {
-      hasIdToken: !!cred.idToken,
-      hasAccessToken: !!cred.accessToken,
-      providerId: cred.providerId,
-    });
-    if (window._mod && cred && (cred.idToken || cred.accessToken)) {
-      try {
-        await window._mod.signInWithGoogle(cred.idToken, cred.accessToken);
-      } catch (e) {
-        console.error('[_mod] mirror sign-in failed', e);
-        toast('登入鏡像失敗：' + (e.message || e), true);
-      }
-    } else {
-      console.warn('[_mod] no credential to mirror — modular app will be unauthenticated');
-      toast('未取得 Google credential — 寫入會被 Firestore 規則擋下', true);
-    }
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
     showAuthed(result.user);
   } catch (e) {
     toast('登入失敗：' + e.message, true);
@@ -623,14 +548,13 @@ $('googleLoginBtn').addEventListener('click', async () => {
 });
 
 $('logoutBtn').addEventListener('click', async () => {
-  await auth.signOut();
+  await signOut(auth);
   showLoggedOut();
 });
 
-// Restore existing Firebase session on page load (Drive token will need re-login)
-auth.onAuthStateChanged(user => {
+// Restore existing session on page load
+onAuthStateChanged(auth, user => {
   if (user && !currentUser) {
-    // Session restored but no fresh Drive token — show authed, but Drive Picker will re-prompt
     showAuthed(user);
   } else if (!user) {
     showLoggedOut();
@@ -666,22 +590,11 @@ $('uploadBtn').addEventListener('click', async () => {
 
     // Write chunks to Firestore in batches of 400 (Firestore batch limit 500)
     setStatus(`寫入 Firestore（${chunks.length} chunks）...`);
-    if (!window._mod) {
-      const why = window._modError ? `: ${window._modError.message || window._modError}` : '（請打開瀏覽器 console 查看）';
-      toast('Modular SDK 載入失敗' + why, true);
-      console.error('[upload] _mod missing, _modError =', window._modError);
-      return;
-    }
-    if (!window._mod.currentUser()) {
-      toast('請先登出再重新用 Google 登入（補授權給寫入用的 SDK）', true);
-      return;
-    }
-    const { vector, serverTimestamp, batch: newBatch, doc: mDoc, setDoc } = window._mod;
     const serverTs = serverTimestamp();
     for (let start = 0; start < chunks.length; start += 400) {
-      const batch = newBatch();
+      const batch = writeBatch(db);
       for (let i = start; i < Math.min(start + 400, chunks.length); i++) {
-        batch.set(mDoc('rag_chunks', `${docId}_${i}`), {
+        batch.set(doc(db, 'rag_chunks', `${docId}_${i}`), {
           docId, docName: name, chunkIndex: i,
           product: product || 'general',
           text: chunks[i],
@@ -693,7 +606,7 @@ $('uploadBtn').addEventListener('click', async () => {
     }
 
     // Write doc metadata
-    await setDoc(mDoc('rag_docs', docId), {
+    await setDoc(doc(db, 'rag_docs', docId), {
       name, product: product || 'general',
       chunkCount: chunks.length,
       uploadedAt: serverTs,
@@ -716,7 +629,7 @@ $('uploadBtn').addEventListener('click', async () => {
 
 // ── Init ──────────────────────────────────────────────────────────
 renderProducts();
-// onAuthStateChanged above handles post-load auth UI state
+console.log('[admin] initialized — Firebase modular SDK 11.6.0');
 </script>
 </body>
 </html>
