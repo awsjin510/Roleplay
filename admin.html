@@ -12,10 +12,35 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- vector() lives only in the modular SDK; bridge it to window for compat code -->
+<!-- Modular Firestore SDK — needed for vector() which is absent from the compat bundle.
+     Shares the same app instance initialised by the compat SDK above. -->
 <script type="module">
-  import { vector } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-  window._fsVector = vector;
+  import { getApp }    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import {
+    getFirestore, vector, writeBatch, doc, setDoc, serverTimestamp,
+    collection, query, orderBy, getDocs, deleteDoc,
+    findNearest,
+  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  // Compat SDK initialises the app synchronously via its own <script>; poll until ready.
+  await new Promise((resolve, reject) => {
+    let n = 0;
+    const t = setInterval(() => {
+      try { getApp(); clearInterval(t); resolve(); }
+      catch { if (++n > 200) { clearInterval(t); reject(new Error('Firebase app timeout')); } }
+    }, 25);
+  });
+
+  const mdb = getFirestore(getApp());
+
+  // Expose helpers used by the upload function
+  window._mod = {
+    vector,
+    serverTimestamp,
+    batch:  ()          => writeBatch(mdb),
+    doc:    (col, id)   => doc(mdb, col, id),
+    setDoc: (ref, data) => setDoc(ref, data),
+  };
 </script>
 <!-- Google API client + Picker loader -->
 <script src="https://apis.google.com/js/api.js"></script>
@@ -600,17 +625,17 @@ $('uploadBtn').addEventListener('click', async () => {
 
     // Write chunks to Firestore in batches of 400 (Firestore batch limit 500)
     setStatus(`寫入 Firestore（${chunks.length} chunks）...`);
-    if (!window._fsVector) { toast('頁面尚未就緒，請重新整理後再試', true); return; }
-    const serverTs = firebase.firestore.FieldValue.serverTimestamp();
+    if (!window._mod) { toast('頁面尚未就緒，請重新整理後再試', true); return; }
+    const { vector, serverTimestamp, batch: newBatch, doc: mDoc, setDoc } = window._mod;
+    const serverTs = serverTimestamp();
     for (let start = 0; start < chunks.length; start += 400) {
-      const batch = db.batch();
+      const batch = newBatch();
       for (let i = start; i < Math.min(start + 400, chunks.length); i++) {
-        const ref = db.collection('rag_chunks').doc(`${docId}_${i}`);
-        batch.set(ref, {
+        batch.set(mDoc('rag_chunks', `${docId}_${i}`), {
           docId, docName: name, chunkIndex: i,
           product: product || 'general',
           text: chunks[i],
-          embedding: window._fsVector(vectors[i]),
+          embedding: vector(vectors[i]),
           createdAt: serverTs,
         });
       }
@@ -618,7 +643,7 @@ $('uploadBtn').addEventListener('click', async () => {
     }
 
     // Write doc metadata
-    await db.collection('rag_docs').doc(docId).set({
+    await setDoc(mDoc('rag_docs', docId), {
       name, product: product || 'general',
       chunkCount: chunks.length,
       uploadedAt: serverTs,

@@ -30,10 +30,26 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- vector() lives only in the modular SDK; bridge it to window for compat code -->
+<!-- Modular Firestore SDK for vector() and findNearest(), absent from the compat bundle. -->
 <script type="module">
-  import { vector } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-  window._fsVector = vector;
+  import { getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import {
+    getFirestore, vector, query, collection, findNearest, getDocs,
+  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  await new Promise((resolve, reject) => {
+    let n = 0;
+    const t = setInterval(() => {
+      try { getApp(); clearInterval(t); resolve(); }
+      catch { if (++n > 200) { clearInterval(t); reject(new Error('Firebase app timeout')); } }
+    }, 25);
+  });
+
+  const mdb = getFirestore(getApp());
+  window._mod = {
+    findNearest: (field, values, opts) =>
+      getDocs(query(collection(mdb, 'rag_chunks'), findNearest(field, vector(values), opts))),
+  };
 </script>
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
@@ -409,12 +425,11 @@ async function queryRAG(scenario) {
     const { values } = await embedRes.json();
     if (!values || !Array.isArray(values)) return [];
 
-    // 2) Firestore native vector search (requires auth + composite vector index on `embedding`)
-    const snap = await db.collection('rag_chunks').findNearest(
-      'embedding',
-      window._fsVector(values),
-      { limit: 5, distanceMeasure: 'COSINE' }
-    ).get();
+    // 2) Firestore native vector search via modular SDK (compat bundle lacks vector())
+    if (!window._mod) return [];
+    const snap = await window._mod.findNearest(
+      'embedding', values, { limit: 5, distanceMeasure: 'COSINE' }
+    );
     return snap.docs.map(d => d.data().text).filter(Boolean);
   } catch (e) {
     console.warn('queryRAG failed', e);
