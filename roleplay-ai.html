@@ -37,6 +37,7 @@
   import {
     getFirestore, vector, query, collection, findNearest, getDocs,
   } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+  import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
 
   const app = initializeApp({
     apiKey:            "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
@@ -48,9 +49,16 @@
   }, 'mod');
 
   const mdb = getFirestore(app);
+  const mauth = getAuth(app);
+  // Modular 'mod' app has its own auth state; sign it in anonymously so Firestore
+  // findNearest() carries an auth token (rules require request.auth != null).
+  const authReady = signInAnonymously(mauth).catch(e => console.warn('[_mod] anon sign-in failed', e));
+
   window._mod = {
-    findNearest: (field, values, opts) =>
-      getDocs(query(collection(mdb, 'rag_chunks'), findNearest(field, vector(values), opts))),
+    findNearest: async (field, values, opts) => {
+      await authReady;
+      return getDocs(query(collection(mdb, 'rag_chunks'), findNearest(field, vector(values), opts)));
+    },
   };
 </script>
 <script type="text/babel">

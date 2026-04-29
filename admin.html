@@ -24,7 +24,9 @@
     // Bump modular SDK to 11.x where vector() and findNearest() are GA.
     const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js');
     const fs = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js');
+    const fa = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js');
     const { getFirestore, vector, writeBatch, doc, setDoc, serverTimestamp } = fs;
+    const { getAuth, signInWithCredential, GoogleAuthProvider } = fa;
     if (typeof vector !== 'function') {
       throw new Error('vector() not exported from firebase-firestore.js — got: ' + typeof vector);
     }
@@ -37,12 +39,22 @@
       appId:             "1:759367183812:web:595bfc7e19c40344d58891",
     }, 'mod');
     const mdb = getFirestore(app);
+    const mauth = getAuth(app);
     window._mod = {
       vector,
       serverTimestamp,
       batch:  ()          => writeBatch(mdb),
       doc:    (col, id)   => doc(mdb, col, id),
       setDoc: (ref, data) => setDoc(ref, data),
+      // Sign the modular 'mod' app in with the same Google credential the compat
+      // SDK got from signInWithPopup, so Firestore writes carry an auth token.
+      signInWithGoogle: async (idToken, accessToken) => {
+        const cred = GoogleAuthProvider.credential(idToken || null, accessToken || null);
+        const r = await signInWithCredential(mauth, cred);
+        console.log('[_mod] signed in:', r.user.email);
+        return r.user;
+      },
+      currentUser: () => mauth.currentUser,
     };
     console.log('[_mod] modular Firestore loaded OK');
   } catch (e) {
@@ -583,6 +595,15 @@ $('googleLoginBtn').addEventListener('click', async () => {
     // Drive scope is handled separately via GIS token client when Picker is opened,
     // so we don't request it here — avoids the sensitive-scope 403 on login.
     const result = await auth.signInWithPopup(provider);
+    // Mirror the sign-in into the modular 'mod' app so Firestore vector writes
+    // carry an auth token (Firestore rules require request.auth != null).
+    if (window._mod && result.credential) {
+      try {
+        await window._mod.signInWithGoogle(result.credential.idToken, result.credential.accessToken);
+      } catch (e) {
+        console.warn('[_mod] mirror sign-in failed', e);
+      }
+    }
     showAuthed(result.user);
   } catch (e) {
     toast('登入失敗：' + e.message, true);
@@ -637,6 +658,10 @@ $('uploadBtn').addEventListener('click', async () => {
       const why = window._modError ? `: ${window._modError.message || window._modError}` : '（請打開瀏覽器 console 查看）';
       toast('Modular SDK 載入失敗' + why, true);
       console.error('[upload] _mod missing, _modError =', window._modError);
+      return;
+    }
+    if (!window._mod.currentUser()) {
+      toast('請先登出再重新用 Google 登入（補授權給寫入用的 SDK）', true);
       return;
     }
     const { vector, serverTimestamp, batch: newBatch, doc: mDoc, setDoc } = window._mod;
