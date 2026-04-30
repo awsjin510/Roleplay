@@ -79,7 +79,7 @@ const CONFIG = {
 const SLOT_DATA = {
   產品服務: { icon: "🎯", items: ["資安服務","MDR","SOC","MSSP","CMSP","IDC","CDN","資安產品","雲端服務"] },
   產業: { icon: "🏢", items: ["遊戲產業","電商平台","零售品牌","連鎖餐飲","製造業","傳統工廠","醫療院所","生技公司","金融機構","保險公司","行銷公司","廣告代理商","SI系統整合商","政府機關","新創公司"] },
-  角色: { icon: "🧑‍💼", items: ["行政｜總機","行政｜行政助理","技術｜IT窗口","技術｜MIS工程師","技術｜IT主管","技術｜資訊長(CIO)","技術｜技術主管","業務｜採購","業務｜部門主管","業務｜老闆","業務｜營運主管","產品｜PM專案經理"] },
+  角色: { icon: "🧑‍💼", items: ["總機","行政助理","IT窗口","MIS工程師","IT主管","資訊長(CIO)","採購","PM專案經理","技術主管","部門主管","老闆","營運主管"] },
   情境: { icon: "📋", items: ["目前已有供應商","沒有預算","系統速度太慢","系統經常當機","IT人力不足","資料中心老舊","正在評估雲端","剛被DDOS攻擊","流量突然暴增","公司準備擴張","正在導入新系統","ERP系統老舊","POS系統不穩","跨據點連線問題","資安問題","主管要求降低成本","IT設備即將到期","想做系統備援","資料備份不足","正在做數位轉型","公司準備IPO","海外據點增加","資料量快速成長","客戶要求高可用","正在評估多雲架構","IT預算被砍","正在更換供應商","競品正在接觸","老闆要求降低IT成本","IT團隊過勞","資料分析速度慢","網站常Lag","新產品即將上線","公司併購整合系統","內部系統太複雜","系統部署太慢","IT架構過於分散","公司要求上雲","IT策略正在調整","想降低維運成本"] },
   難度: { icon: "🔥", color: "red", items: ["客戶非常忙","客戶不耐煩","客戶一直打斷","客戶只願意給5分鐘","客戶非常懂技術","客戶只談價格","客戶不信任新供應商","客戶認為現在系統很好","客戶一直提競品","客戶要求立刻報價","客戶一直說沒預算","客戶一直拖延","客戶要求先寄資料","客戶只願意Email溝通","客戶認為你們太小","客戶只關心穩定性","客戶很保守","客戶要求成功案例","客戶認為雲端太貴","客戶擔心資安"] },
   資安項目: { icon: "🔒", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"] },
@@ -87,15 +87,6 @@ const SLOT_DATA = {
 };
 const BASE_CATEGORIES = Object.keys(SLOT_DATA).filter(c => c !== '雲端環境' && c !== '資安項目');
 const ALL_CATEGORIES = Object.keys(SLOT_DATA);
-const ROLE_DEPT = {
-  '總機':'行政','行政助理':'行政',
-  'IT窗口':'技術','MIS工程師':'技術','IT主管':'技術','資訊長(CIO)':'技術','技術主管':'技術',
-  '採購':'業務','部門主管':'業務','老闆':'業務','營運主管':'業務',
-  'PM專案經理':'產品',
-};
-const DEPT_COLOR = { '行政':'#94a3b8','技術':'#06b6d4','業務':'#f59e0b','產品':'#22c55e' };
-function pureRole(r){ return r?.includes('｜') ? r.split('｜')[1] : r; }
-function roleDept(r){ if(!r) return null; if(r.includes('｜')) return r.split('｜')[0]; return ROLE_DEPT[r]||null; }
 
 const roleProfiles = {
   總機: { techLevel:"無", decisionPower:"無，只負責轉接電話", personality:"禮貌但防衛性高，習慣婉拒陌生來電", concerns:"不想惹麻煩、不想被主管責怪接了推銷電話" },
@@ -367,7 +358,7 @@ function ApiKeyModal({ onSaved }) {
 // PROMPT BUILDERS
 // ============================================================
 function buildSystemPrompt(scenario, ragChunks = []) {
-  const role = roleProfiles[pureRole(scenario.角色)] || roleProfiles['IT窗口'];
+  const role = roleProfiles[scenario.角色] || roleProfiles['IT窗口'];
   const industry = industryProfiles[scenario.產業] || industryProfiles['新創公司'];
   const difficulty = difficultyBehaviors[scenario.難度] || '';
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
@@ -385,7 +376,7 @@ function buildSystemPrompt(scenario, ragChunks = []) {
 公司知識庫（以下是公司提供的實際產品與流程資料，請優先以此為準，不要只憑通用知識回答或提問）：
 ${ragChunks.join('\n\n---\n')}
 ---` : '';
-  return `你是一位${scenario.產業}的${pureRole(scenario.角色)}，正在接受業務 ${scenario.業務} 的拜訪。
+  return `你是一位${scenario.產業}的${scenario.角色}，正在接受業務 ${scenario.業務} 的拜訪。
 
 ⚠️ 絕對限制（最高優先，不得違反）：
 - 每次回覆只能包含「一個」問句。多問等於違規。
@@ -395,7 +386,7 @@ ${ragChunks.join('\n\n---\n')}
 - 每次回覆最多 2-3 句話，不得更長
 
 你的角色背景：
-- 職位：${pureRole(scenario.角色)}，技術水平${role.techLevel}，決策權：${role.decisionPower}
+- 職位：${scenario.角色}，技術水平${role.techLevel}，決策權：${role.decisionPower}
 - 目前狀況：${scenario.情境}
 - 你最在意的事：${role.concerns}
 - 產業背景：${industry.painPoints}
@@ -418,7 +409,7 @@ ${difficulty ? `你的風格特色：${difficulty}` : ''}
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
   return `你是資深銷售培訓教練，請覆盤以下角色扮演練習。
 
-情境：業務${scenario.業務}向${scenario.產業}的${pureRole(scenario.角色)}推銷${scenario.產品服務}，客戶情境「${scenario.情境}」，難度「${scenario.難度}」。
+情境：業務${scenario.業務}向${scenario.產業}的${scenario.角色}推銷${scenario.產品服務}，客戶情境「${scenario.情境}」，難度「${scenario.難度}」。
 
 指標變化：${JSON.stringify(metricsHistory)}
 
@@ -700,7 +691,7 @@ function SetupPhase({ onStart }) {
             {requiredCats.map(cat=>(
               <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='雲端環境'?'rgba(6,182,212,0.3)':'rgba(255,255,255,0.1)'}`,borderRadius:10,padding:'7px 13px',fontSize:12}}>
                 <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>{SLOT_DATA[cat].icon} {cat}</span>
-                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{cat==='角色'?pureRole(selections[cat]):selections[cat]}</span>
+                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
               </div>
             ))}
           </div>
@@ -1261,17 +1252,9 @@ function HistoryModal({ onClose }) {
                     <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>· {r.turns} 輪</span>
                   </div>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                    {[r.scenario?.業務, r.scenario?.產品, r.scenario?.產業].filter(Boolean).map(t=>(
+                    {[r.scenario?.業務, r.scenario?.產品, r.scenario?.產業, r.scenario?.角色].filter(Boolean).map(t=>(
                       <span key={t} style={{fontSize:10,padding:'2px 7px',background:'rgba(255,255,255,0.07)',borderRadius:20,color:'rgba(255,255,255,0.55)'}}>{t}</span>
                     ))}
-                    {r.scenario?.角色 && (()=>{
-                      const dept = roleDept(r.scenario.角色);
-                      const deptColor = DEPT_COLOR[dept] || 'rgba(255,255,255,0.55)';
-                      return (<>
-                        {dept && <span style={{fontSize:10,padding:'2px 7px',background:`${deptColor}22`,border:`1px solid ${deptColor}55`,borderRadius:20,color:deptColor,fontWeight:600}}>{dept}部</span>}
-                        <span style={{fontSize:10,padding:'2px 7px',background:'rgba(255,255,255,0.07)',borderRadius:20,color:'rgba(255,255,255,0.55)'}}>{pureRole(r.scenario.角色)}</span>
-                      </>);
-                    })()}
                   </div>
                 </div>
                 <span style={{color:'rgba(255,255,255,0.3)',fontSize:13,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
