@@ -27,6 +27,7 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -1177,6 +1178,56 @@ function LeaderboardModal({ onClose }) {
 }
 
 // ============================================================
+// EXPORT TO EXCEL
+// ============================================================
+function exportHistoryToExcel(records) {
+  if (typeof XLSX === 'undefined') { alert('Excel 匯出元件尚未載入，請稍候再試或確認網路連線。'); return; }
+  if (!records || !records.length) { alert('目前沒有練習記錄可以匯出。'); return; }
+  const fmtDateCell = (iso) => {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const rows = records.map(r => {
+    const s = r.scenario || {};
+    const m = r.finalMetrics || {};
+    return {
+      '日期': fmtDateCell(r.date),
+      '練習者': r.practitioner || '',
+      '業務': s.業務 || '',
+      '產品': s.產品 || '',
+      '產業': s.產業 || '',
+      '角色': s.角色 || '',
+      '情境': s.情境 || '',
+      '難度': s.難度 || '',
+      '雲端環境': s.雲端環境 || '',
+      '輪數': r.turns ?? '',
+      '分數': r.score ?? '',
+      '等級': r.grade || '',
+      '信任度': m.trust ?? '',
+      '興趣度': m.interest ?? '',
+      '購買意願': m.buyIntent ?? '',
+      '總結': r.summary || '',
+      '做得好': (r.strengths || []).join('\n'),
+      '可改進': (r.improvements || []).join('\n'),
+      '教練建議': r.coachAdvice || '',
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+    { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 6 }, { wch: 6 }, { wch: 6 },
+    { wch: 8 }, { wch: 8 }, { wch: 9 }, { wch: 44 }, { wch: 30 }, { wch: 30 }, { wch: 40 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '練習記錄');
+  const p = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${p(now.getMonth()+1)}${p(now.getDate())}_${p(now.getHours())}${p(now.getMinutes())}`;
+  XLSX.writeFile(wb, `練習記錄_${stamp}.xlsx`);
+}
+
+// ============================================================
 // HISTORY MODAL
 // ============================================================
 function HistoryModal({ onClose }) {
@@ -1210,7 +1261,11 @@ function HistoryModal({ onClose }) {
       <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.25)',borderRadius:20,width:'100%',maxWidth:640,padding:24,boxShadow:'0 0 60px rgba(99,102,241,0.15)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
           <h2 style={{margin:0,fontSize:18,fontWeight:800}}>📋 練習記錄</h2>
-          <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <button onClick={()=>exportHistoryToExcel(filtered)} disabled={loading||filtered.length===0} title="匯出成 Excel"
+              style={{display:'flex',alignItems:'center',gap:5,padding:'6px 13px',background:(loading||filtered.length===0)?'rgba(255,255,255,0.06)':'linear-gradient(135deg,#16a34a,#22c55e)',border:'none',borderRadius:9,color:'white',fontWeight:700,fontSize:12,cursor:(loading||filtered.length===0)?'not-allowed':'pointer',opacity:(loading||filtered.length===0)?0.5:1}}>📊 匯出 Excel</button>
+            <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+          </div>
         </div>
 
         {/* Name filter */}
