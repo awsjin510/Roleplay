@@ -398,3 +398,12 @@ body {
     box-shadow: 0 4px 40px rgba(var(--accent-rgb), 0.55), 0 0 60px rgba(var(--purple-rgb), 0.2);
   }
 }
+
+/* === Reduced Motion === */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
