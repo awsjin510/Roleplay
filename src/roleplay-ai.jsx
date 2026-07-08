@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { salespersons, products, industries, personas, situations, difficulties, cloudEnvironments } from '../js/data.js';
-import { roleProfiles, industryProfiles, cloudEnvProfiles, difficultyBehaviors, HINTS } from '../js/profiles.js';
+import { roleProfiles, industryProfiles, cloudEnvProfiles, difficultyBehaviors, visitObjectives, HINTS } from '../js/profiles.js';
 
 // ============================================================
 // DATA（清單與轉盤頁共用 js/data.js，設定檔共用 js/profiles.js）
@@ -86,10 +86,15 @@ function ApiKeyModal({ onSaved }) {
 // ============================================================
 // PROMPT BUILDERS
 // ============================================================
+function getObjective(scenario) {
+  return visitObjectives[scenario.角色] || visitObjectives['IT窗口'];
+}
+
 function buildSystemPrompt(scenario) {
   const role = roleProfiles[scenario.角色] || roleProfiles['IT窗口'];
   const industry = industryProfiles[scenario.產業] || industryProfiles['新創公司'];
   const difficulty = difficultyBehaviors[scenario.難度] || '';
+  const objective = getObjective(scenario);
   const cloudEnv = cloudEnvProfiles[scenario.雲端環境];
   const cloudSection = cloudEnv ? `
 ## 你的雲端環境背景（${scenario.雲端環境}）
@@ -123,6 +128,14 @@ ${cloudSection}
 ## 行為模式（難度）
 ${difficulty}
 
+## 業務的本次拜訪目標（勝負判定）
+業務這次拜訪的目標是：${objective.goal}
+判定標準：${objective.win}
+- 你不能主動送出這個結果，必須由業務靠有效的提問、傾聽與論述爭取
+- 只有當業務至少經過 3-4 輪有效論述、問到你的痛點、並回應了你的疑慮，你才逐步鬆口答應
+- 如果業務只顧介紹產品、沒問你的需求，或答非所問，你絕不答應
+- 一旦你真的答應了判定標準中的事，在隱藏指標中把 goal 設為 "achieved"；有明顯進展但未答應時設為 "partial"
+
 ## 對話規則
 1. 全程使用繁體中文，保持角色一致性
 2. 不要太快被說服 — 至少需要 3-4 輪有效論述才開始鬆口
@@ -132,22 +145,37 @@ ${difficulty}
 6. 若有雲端環境背景，對話中自然融入該平台的術語與顧慮
 
 ## 隱藏指標
-每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"notes":"記錄"}-->
-初始值 trust=20, interest=30, buyIntent=10，每輪變化 -10 到 +15。`;
+每次回覆末尾加：<!--METRICS:{"trust":數字,"interest":數字,"buyIntent":數字,"goal":"none|partial|achieved","notes":"記錄"}-->
+初始值 trust=20, interest=30, buyIntent=10, goal="none"，每輪變化 -10 到 +15。`;
 }
 
 function buildReviewPrompt(scenario, conversationLog, metricsHistory) {
+  const objective = getObjective(scenario);
   return `你是資深銷售培訓教練，請覆盤以下角色扮演練習。
 
 情境：業務${scenario.業務}向${scenario.產業}的${scenario.角色}推銷${scenario.產品}，客戶情境「${scenario.情境}」，難度「${scenario.難度}」。
+
+本次拜訪目標：${objective.goal}
+達成判定標準：${objective.win}
 
 指標變化：${JSON.stringify(metricsHistory)}
 
 對話記錄：
 ${conversationLog}
 
+評分規則：
+1. goalAchieved：嚴格依判定標準判斷，客戶沒有明確答應就是 false
+2. rubric 五個維度各 0-20 分：
+   - opening（開場破冰）：是否快速建立情境、說明來意、引起興趣
+   - questioning（提問品質）：是否問出客戶痛點與需求，而非急著介紹產品
+   - listening（傾聽回應）：是否接住客戶說的話並延伸，而非自說自話
+   - objectionHandling（異議處理）：面對質疑與拒絕的回應品質
+   - nextStep（下一步承諾）：是否明確爭取並確認下一步行動
+3. overallScore 必須等於五個 rubric 分數的總和（滿分 100）
+4. bant 檢核：業務「有沒有問到」預算(budget)、決策權(authority)、需求(need)、時程(timeline)，asked 為 true/false，note 一句話說明證據或指出沒問到
+
 請用 JSON 格式回覆（不含其他文字）：
-{"overallScore":75,"grade":"B","summary":"總結50字","strengths":["優點1","優點2"],"improvements":["改進1","改進2"],"missedOpportunities":["錯過機會1"],"keyMoment":"關鍵轉折描述","coachAdvice":"具體建議100字","metricsAnalysis":{"trustTrend":"上升","interestTrend":"持平","buyIntentTrend":"下降","analysis":"分析50字"}}`;
+{"goalAchieved":false,"goalComment":"目標達成情況說明30字","rubric":{"opening":{"score":12,"comment":"評語"},"questioning":{"score":10,"comment":"評語"},"listening":{"score":14,"comment":"評語"},"objectionHandling":{"score":11,"comment":"評語"},"nextStep":{"score":8,"comment":"評語"}},"bant":{"budget":{"asked":false,"note":"說明"},"authority":{"asked":true,"note":"說明"},"need":{"asked":true,"note":"說明"},"timeline":{"asked":false,"note":"說明"}},"overallScore":55,"grade":"C","summary":"總結50字","strengths":["優點1","優點2"],"improvements":["改進1","改進2"],"missedOpportunities":["錯過機會1"],"keyMoment":"關鍵轉折描述","coachAdvice":"具體建議100字","metricsAnalysis":{"trustTrend":"上升","interestTrend":"持平","buyIntentTrend":"下降","analysis":"分析50字"}}`;
 }
 
 // ============================================================
@@ -429,6 +457,10 @@ function SetupPhase({ onStart }) {
               </div>
             ))}
           </div>
+          <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '10px 13px', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#4ade80', letterSpacing: '0.05em', marginBottom: 4 }}>🎯 本次拜訪目標</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>{getObjective(selections).goal}</div>
+          </div>
           <button onClick={() => onStart(selections)} style={{ width: '100%', padding: '15px 0', background: 'linear-gradient(135deg,#6366f1,#a855f7)', border: 'none', borderRadius: 12, color: 'white', fontWeight: 700, fontSize: 16, cursor: 'pointer', boxShadow: '0 0 28px rgba(99,102,241,0.5)' }}>
             🎯 開始角色扮演練習
           </button>
@@ -480,6 +512,7 @@ function ChatPhase({ scenario, onEnd }) {
 
   const hint = () => { setToast(HINTS[Math.floor(Math.random() * HINTS.length)]); setTimeout(() => setToast(null), 3500); };
   const end = () => onEnd(scenario, messages.map(m => `${m.role === 'user' ? '業務' : '客戶'}: ${m.content}`).join('\n\n'), mHistory);
+  const goalState = metrics.goal || 'none';
 
   const bubble = (msg, i, isStreaming) => (
     <div key={isStreaming ? 'streaming' : i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', animation: 'fadeInUp 0.25s ease' }}>
@@ -509,9 +542,17 @@ function ChatPhase({ scenario, onEnd }) {
             </span>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, padding: '2px 10px', fontSize: 12, fontWeight: 600, color: '#a5b4fc' }}>
             第 {turns} 輪
+          </span>
+          <span style={{
+            background: goalState === 'achieved' ? 'rgba(34,197,94,0.15)' : goalState === 'partial' ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${goalState === 'achieved' ? 'rgba(34,197,94,0.4)' : goalState === 'partial' ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 6, padding: '2px 10px', fontSize: 11,
+            color: goalState === 'achieved' ? '#4ade80' : goalState === 'partial' ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+          }}>
+            🎯 {getObjective(scenario).goal}{goalState === 'achieved' ? '　✅ 已達成' : goalState === 'partial' ? '　⏳ 有進展' : ''}
           </span>
           {loading && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>AI 回覆中...</span>}
         </div>
@@ -565,7 +606,7 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     (async () => {
-      const r = await sendMessage([{ role: 'user', content: buildReviewPrompt(scenario, log, mHistory) }], '你是資深銷售培訓教練，用JSON格式提供覆盤。', { maxTokens: 2000 });
+      const r = await sendMessage([{ role: 'user', content: buildReviewPrompt(scenario, log, mHistory) }], '你是資深銷售培訓教練，用JSON格式提供覆盤。', { maxTokens: 3000 });
       try {
         // 用深度追蹤正確擷取最外層 JSON 物件
         const extractJSON = (s) => { const i = s.indexOf('{'); if (i < 0) return null; let d = 0; for (let j = i; j < s.length; j++) { if (s[j] === '{') d++; else if (s[j] === '}') { d--; if (d === 0) return s.slice(i, j + 1); } } return null; };
@@ -595,9 +636,23 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
 
   const grade = review.grade || 'B', score = review.overallScore || 0, color = gc[grade] || '#6366f1';
   const circ = 2 * Math.PI * 38;
+  const objective = getObjective(scenario);
+  const goalOk = review.goalAchieved === true;
+  const RUBRIC_LABELS = { opening: '開場破冰', questioning: '提問品質', listening: '傾聽回應', objectionHandling: '異議處理', nextStep: '下一步承諾' };
+  const BANT_LABELS = { budget: '預算 Budget', authority: '決策權 Authority', need: '需求 Need', timeline: '時程 Timeline' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
       <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: 0 }}>🏆 練習覆盤報告</h2>
+
+      {/* 拜訪目標判定 */}
+      <div style={{ background: goalOk ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)', border: `1px solid ${goalOk ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 14, padding: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 18 }}>{goalOk ? '✅' : '❌'}</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: goalOk ? '#4ade80' : '#fca5a5' }}>{goalOk ? '拜訪目標達成' : '拜訪目標未達成'}</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>目標：{objective.goal}</div>
+        {review.goalComment && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.68)', lineHeight: 1.6 }}>{review.goalComment}</div>}
+      </div>
 
       <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 20, display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
@@ -620,6 +675,55 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
           <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>{review.summary}</p>
         </div>
       </div>
+
+      {/* Rubric 五維度評分 */}
+      {review.rubric && (
+        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 }}>
+          <h4 style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 14px 0', fontSize: 13 }}>📋 銷售技巧評分表</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {Object.entries(RUBRIC_LABELS).map(([key, label]) => {
+              const item = review.rubric[key];
+              if (!item) return null;
+              const s = Math.max(0, Math.min(20, item.score ?? 0));
+              const barColor = s >= 15 ? '#22c55e' : s >= 10 ? '#f59e0b' : '#ef4444';
+              return (
+                <div key={key}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)' }}>{label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: barColor }}>{s} / 20</span>
+                  </div>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                    <div style={{ width: `${(s / 20) * 100}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.8s ease' }} />
+                  </div>
+                  {item.comment && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>{item.comment}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* BANT 檢核表 */}
+      {review.bant && (
+        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 }}>
+          <h4 style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 12px 0', fontSize: 13 }}>🔍 BANT 檢核 — 這次拜訪問到了嗎？</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+            {Object.entries(BANT_LABELS).map(([key, label]) => {
+              const item = review.bant[key];
+              if (!item) return null;
+              return (
+                <div key={key} style={{ background: item.asked ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.05)', border: `1px solid ${item.asked ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.18)'}`, borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span>{item.asked ? '✅' : '❌'}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: item.asked ? '#4ade80' : '#fca5a5' }}>{label}</span>
+                  </div>
+                  {item.note && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>{item.note}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {chartData.length > 1 && (
         <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 }}>
