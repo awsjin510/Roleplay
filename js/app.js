@@ -83,22 +83,23 @@ document.addEventListener('wheel-change', (e) => {
   }
 });
 
-// Spin All button
-document.getElementById('spin-all').addEventListener('click', async () => {
-  const baseKeys = ['salesperson', 'product', 'industry', 'persona', 'situation', 'difficulty'];
-  const delays = [0, 150, 300, 450, 600, 750];
+// 轉動指定轉盤；產品轉出雲端服務時，接著轉雲端環境
+function spinWheel(key) {
+  return wheels[key].spin().then(() => {
+    if (key === 'product') {
+      updateCloudEnvVisibility();
+      if (isCloudProduct()) {
+        setTimeout(() => wheels['cloud-env'].spin(), 200);
+      }
+    }
+  });
+}
 
+// Spin All button
+document.getElementById('spin-all').addEventListener('click', () => {
+  const baseKeys = ['salesperson', 'product', 'industry', 'persona', 'situation', 'difficulty'];
   baseKeys.forEach((key, i) => {
-    setTimeout(() => {
-      wheels[key].spin().then(() => {
-        if (key === 'product') {
-          updateCloudEnvVisibility();
-          if (isCloudProduct()) {
-            setTimeout(() => wheels['cloud-env'].spin(), 200);
-          }
-        }
-      });
-    }, delays[i]);
+    setTimeout(() => spinWheel(key), i * 150);
   });
 });
 
@@ -114,16 +115,8 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 // Individual spin buttons
 document.querySelectorAll('.spin-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const key = btn.dataset.wheel;
-    if (wheels[key]) {
-      wheels[key].spin().then(() => {
-        if (key === 'product') {
-          updateCloudEnvVisibility();
-          if (isCloudProduct()) {
-            setTimeout(() => wheels['cloud-env'].spin(), 200);
-          }
-        }
-      });
+    if (wheels[btn.dataset.wheel]) {
+      spinWheel(btn.dataset.wheel);
     }
   });
 });

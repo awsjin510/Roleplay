@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>業務角色扮演轉盤</title>
+  <meta name="description" content="隨機組合業務、產品、產業、角色、情境與難度，產生銷售角色扮演練習情境，並可接續 AI 對話練習。">
+  <meta name="theme-color" content="#0a0e1a">
+  <meta property="og:title" content="業務角色扮演轉盤">
+  <meta property="og:description" content="隨機組合練習情境，提升你的銷售應對力。">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎰</text></svg>">
   <link rel="stylesheet" href="./css/main.css">
   <link rel="stylesheet" href="./css/spinner.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -111,7 +117,7 @@
 
     <div class="result-card" id="result-card">
       <h2>你的練習情境</h2>
-      <div class="result-grid">
+      <div class="result-grid" aria-live="polite">
         <div class="result-item">
           <span class="result-label">業務</span>
           <span class="result-value" id="result-salesperson">—</span>

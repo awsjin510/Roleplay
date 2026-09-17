@@ -37,11 +37,12 @@ export class SpinnerWheel {
 
     for (let r = 0; r < REPEATS; r++) {
       for (let i = 0; i < total; i++) {
-        const div = document.createElement('div');
-        div.className = 'wheel-item';
-        div.textContent = this.options[i];
-        div.dataset.index = i;
-        this.strip.appendChild(div);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'wheel-item';
+        btn.textContent = this.options[i];
+        btn.dataset.index = i;
+        this.strip.appendChild(btn);
       }
     }
   }
@@ -96,7 +97,11 @@ export class SpinnerWheel {
       this.strip.classList.add('spinning');
       this.strip.style.transform = `translateY(${targetY}px)`;
 
+      let finished = false;
       const onEnd = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(fallbackTimer);
         this.strip.removeEventListener('transitionend', onEnd);
         this.spinning = false;
 
@@ -116,6 +121,8 @@ export class SpinnerWheel {
       };
 
       this.strip.addEventListener('transitionend', onEnd);
+      // 分頁在背景時瀏覽器可能不觸發 transitionend，用計時器保底避免卡在轉動狀態
+      const fallbackTimer = setTimeout(onEnd, 2200);
     });
   }
 
