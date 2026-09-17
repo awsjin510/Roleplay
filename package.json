@@ -3,15 +3,17 @@
   "version": "1.0.0",
   "description": "Business role-play spinner + AI practice tool",
   "scripts": {
-    "build": "esbuild src/roleplay-ai.jsx --bundle --minify --format=iife --target=es2019 --define:process.env.NODE_ENV='\"production\"' --outfile=js/roleplay-ai.min.js"
+    "build": "esbuild src/roleplay-ai.jsx --bundle --minify --format=iife --target=es2020 --define:process.env.NODE_ENV='\"production\"' --outfile=js/roleplay-ai.min.js"
   },
   "repository": {
     "type": "git",
-    "url": "http://local_proxy@127.0.0.1:41729/git/awsjin510/Roleplay"
+    "url": "https://github.com/awsjin510/Roleplay.git"
   },
   "dependencies": {
+    "firebase": "^12.19.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "esbuild": "^0.24.2"

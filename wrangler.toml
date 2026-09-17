@@ -1,0 +1,11 @@
+name = "sales-roleplay-worker"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Workers AI for embeddings (@cf/baai/bge-base-en-v1.5, 768-dim)
+[ai]
+binding = "AI"
+
+# Secrets (set via `npx wrangler secret put <NAME>`):
+#   ANTHROPIC_API_KEY  Anthropic API key for /chat proxy
+#   APP_TOKEN          Token sent as X-App-Token by admin.html and roleplay-ai.html

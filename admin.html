@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG 知識庫管理 — 業務練習器</title>
+<!-- File parsing libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- Google API client + Picker loader -->
+<script src="https://apis.google.com/js/api.js"></script>
+<!-- Google Identity Services (GIS) — token client for Drive scope -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    min-height: 100vh;
+  }
+  h1 { margin: 0 0 16px; font-size: 24px; }
+  h2 { margin: 24px 0 12px; font-size: 18px; color: #a5b4fc; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .card {
+    background: rgba(30,41,59,0.7);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 18px;
+  }
+  label { display: block; font-size: 13px; color: rgba(255,255,255,0.6); margin: 10px 0 4px; }
+  input, select, textarea, button {
+    font: inherit; color: inherit;
+    background: rgba(15,23,42,0.8);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; padding: 9px 12px; width: 100%;
+  }
+  textarea { min-height: 180px; resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
+  button {
+    background: linear-gradient(135deg,#6366f1,#a855f7);
+    border: none; cursor: pointer; font-weight: 600;
+    padding: 10px 16px; width: auto;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.danger { background: #ef4444; }
+  button.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.15); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 180px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  th { color: rgba(255,255,255,0.5); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: rgba(99,102,241,0.2); color: #a5b4fc; }
+  .pill.ok { background: rgba(34,197,94,0.2); color: #86efac; }
+  .muted { color: rgba(255,255,255,0.45); font-size: 13px; }
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(99,102,241,0.95); color: white;
+    padding: 10px 18px; border-radius: 8px; z-index: 999;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .toast.err { background: rgba(239,68,68,0.95); }
+
+  /* Drop zone */
+  #dropZone {
+    border: 2px dashed rgba(99,102,241,0.4);
+    border-radius: 10px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 14px;
+    user-select: none;
+  }
+  #dropZone:hover, #dropZone.over {
+    border-color: rgba(99,102,241,0.85);
+    background: rgba(99,102,241,0.07);
+  }
+  #dropZone.parsing {
+    border-color: rgba(245,158,11,0.7);
+    background: rgba(245,158,11,0.06);
+  }
+  #dropZone.done {
+    border-color: rgba(34,197,94,0.7);
+    background: rgba(34,197,94,0.06);
+  }
+  #dropZone .icon { font-size: 32px; margin-bottom: 8px; }
+  #dropZone .hint { font-size: 14px; color: rgba(255,255,255,0.55); }
+  #dropZone .hint b { color: #a5b4fc; }
+  #dropZone .formats { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 5px; }
+  #fileInput { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 RAG 知識庫管理</h1>
+
+  <div class="card" id="authBlock">
+    <h2>1. 管理員登入</h2>
+    <p class="muted" style="margin:0 0 10px 0">請以白名單內的 Google 帳號登入。點選「從 Google Drive 選取」時會另行請求 Drive 讀取授權。</p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button id="googleLoginBtn">🔐 使用 Google 登入</button>
+      <button class="ghost" id="logoutBtn" style="display:none">登出</button>
+      <span class="muted" id="authStatus"></span>
+    </div>
+  </div>
+
+  <div id="mainBlock" style="display:none">
+    <div class="card">
+      <h2>2. 上傳文件</h2>
+
+      <!-- Source: Drive Picker or local file -->
+      <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <button id="drivePickBtn" type="button">📁 從 Google Drive 選取</button>
+        <button class="ghost" id="localPickBtn" type="button">💻 從本機選取</button>
+      </div>
+      <!-- Drop zone (local file fallback) -->
+      <div id="dropZone">
+        <div class="icon">📂</div>
+        <div class="hint">拖曳檔案到這裡，或按上方按鈕</div>
+        <div class="formats">支援：PDF、Word（.docx）、Excel（.xlsx / .xls / .csv）、純文字（.txt / .md）、Google Docs / Sheets / Slides</div>
+        <div class="hint" id="dropStatus" style="margin-top:8px"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md">
+
+      <div class="row">
+        <div>
+          <label>文件 ID（英數 + 底線，唯一）</label>
+          <input id="docId" placeholder="appguard-datasheet-v2">
+        </div>
+        <div>
+          <label>文件名稱（顯示用）</label>
+          <input id="docName" placeholder="appGuard 產品簡介">
+        </div>
+      </div>
+      <label>對應產品</label>
+      <select id="docProduct">
+        <option value="general">通用 / 全部</option>
+      </select>
+      <label>解析出的文字內容（可在此校對後再上傳）</label>
+      <textarea id="docText" placeholder="拖曳或選擇檔案後自動填入，也可直接貼上純文字..."></textarea>
+      <div style="margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button id="uploadBtn">上傳並建立索引</button>
+        <span class="muted" id="uploadStatus"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. 文件清單</h2>
+      <div style="margin-bottom:10px;">
+        <button class="ghost" id="refreshBtn">重新整理</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>文件名稱</th><th>ID</th><th>產品</th><th>chunks</th><th>上傳時間</th><th>狀態</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="docsTbody"></tbody>
+      </table>
+      <div class="muted" id="docsEmpty" style="padding:16px; text-align:center; display:none">尚無文件</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ══════════════════════════════════════════════════════════════════
+// Firebase modular SDK (single app, single auth, single Firestore).
+// vector() and findNearest() became GA in 11.x; staying on 11.6.0.
+// ══════════════════════════════════════════════════════════════════
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+import {
+  getFirestore, collection, doc, getDocs, setDoc, deleteDoc,
+  query, where, orderBy, writeBatch, serverTimestamp, vector,
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+
+const PRODUCTS = [
+  { group: "具體產品", items: ["appGuard","Ciro","Akamai API Security","OKTA","CyberArk","Aware","Bitsight","Cyble","Fortify","Security Scorecard","Trellix DLP"] },
+  { group: "服務類別", items: ["資安服務","MDR","SOC","MSSP","雲端服務","CMSP","IDC","CDN"] },
+];
+const ALL_PRODUCTS = PRODUCTS.flatMap(g => g.items);
+
+// ── CONFIG (外部服務端點，部署後填入) ─────────────────────────────
+const CONFIG = {
+  workerUrl: 'https://sales-roleplay-worker.awsjin510-roleplay.workers.dev',
+  appToken: 'Ab99050863',
+  oauthClientId: '123739321263-00bn08qno1u1ahu3vhninrjqiakkpm52.apps.googleusercontent.com',
+  pickerApiKey: 'AIzaSyDey2su5-u6Txn2O0iI71qEZRAqjzGBHec',
+};
+
+const FIREBASE_CFG = {
+  apiKey: "AIzaSyAxoGcv67TnIYrn6ytO9psVOtybY0a0oW8",
+  authDomain: "roleplay-training.firebaseapp.com",
+  projectId: "roleplay-training",
+  storageBucket: "roleplay-training.firebasestorage.app",
+  messagingSenderId: "759367183812",
+  appId: "1:759367183812:web:595bfc7e19c40344d58891",
+};
+
+const app  = initializeApp(FIREBASE_CFG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// Drive access token (obtained via GIS token client when Picker is first opened)
+let driveAccessToken = null;
+let currentUser = null;
+
+// Set pdf.js worker
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+const $ = id => document.getElementById(id);
+
+function toast(msg, isErr) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// Call Worker /embed to get a 768-dim vector for given text
+async function embedText(text) {
+  if (!CONFIG.workerUrl || !CONFIG.appToken) throw new Error('Worker URL 或 APP_TOKEN 未設定（見 CONFIG）');
+  const res = await fetch(CONFIG.workerUrl.replace(/\/$/, '') + '/embed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-App-Token': CONFIG.appToken },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Embed HTTP ${res.status}`);
+  return data.values;
+}
+
+// Client-side chunking
+function chunkText(text, maxChars = 800, overlap = 100) {
+  const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  const chunks = [];
+  let current = '';
+  for (const para of paragraphs) {
+    const joined = current ? current + '\n\n' + para : para;
+    if (joined.length > maxChars && current) {
+      chunks.push(current.trim());
+      const tail = current.length > overlap ? current.slice(-overlap) : current;
+      current = tail + '\n\n' + para;
+    } else {
+      current = joined;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  const final = [];
+  for (const c of chunks) {
+    if (c.length <= maxChars * 1.5) { final.push(c); continue; }
+    for (let i = 0; i < c.length; i += maxChars - overlap) final.push(c.slice(i, i + maxChars));
+  }
+  return final;
+}
+
+function renderProducts() {
+  const sel = $('docProduct');
+  PRODUCTS.forEach(({ group, items }) => {
+    const grp = document.createElement('optgroup');
+    grp.label = group;
+    items.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      grp.appendChild(o);
+    });
+    sel.appendChild(grp);
+  });
+}
+
+// ── File name → docId / guess product ──────────────────────────
+function nameToId(filename) {
+  return filename.replace(/\.[^.]+$/, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'doc-' + Date.now();
+}
+
+function guessProduct(filename) {
+  const lower = filename.toLowerCase();
+  return ALL_PRODUCTS.find(p => lower.includes(p.toLowerCase())) || null;
+}
+
+// ── Parsers ─────────────────────────────────────────────────────
+async function parsePDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const parts = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const line = content.items.map(it => it.str).join(' ').trim();
+    if (line) parts.push(line);
+  }
+  return parts.join('\n\n');
+}
+
+async function parseDocx(file) {
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value.trim();
+}
+
+async function parseExcel(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const parts = [];
+  wb.SheetNames.forEach(name => {
+    const ws = wb.Sheets[name];
+    const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+    if (csv.trim()) parts.push(`=== ${name} ===\n${csv.trim()}`);
+  });
+  return parts.join('\n\n');
+}
+
+async function parseTxt(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result.trim());
+    r.onerror = rej;
+    r.readAsText(file, 'UTF-8');
+  });
+}
+
+async function parseFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return parsePDF(file);
+  if (ext === 'docx') return parseDocx(file);
+  if (['xlsx','xls','csv'].includes(ext)) return parseExcel(file);
+  if (['txt','md'].includes(ext)) return parseTxt(file);
+  throw new Error(`不支援的格式：.${ext}`);
+}
+
+function dropState(state, msg) {
+  const dz = $('dropZone');
+  dz.className = state ? state : '';
+  $('dropStatus').textContent = msg || '';
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  dropState('parsing', `解析中：${file.name}...`);
+  try {
+    const text = await parseFile(file);
+    $('docText').value = text;
+    if (!$('docId').value) $('docId').value = nameToId(file.name);
+    if (!$('docName').value) $('docName').value = file.name.replace(/\.[^.]+$/, '');
+    const p = guessProduct(file.name);
+    if (p) $('docProduct').value = p;
+    const words = text.split(/\s+/).length;
+    dropState('done', `✅ 解析完成（約 ${words.toLocaleString()} 字）。請確認內容後按「上傳並建立索引」。`);
+  } catch (e) {
+    dropState('', '');
+    toast('解析失敗：' + e.message, true);
+  }
+}
+
+// Drop zone events
+const dz = $('dropZone');
+dz.addEventListener('click', () => $('fileInput').click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+$('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+  e.target.value = '';
+});
+$('localPickBtn').addEventListener('click', () => $('fileInput').click());
+
+// ── Google Drive Picker ──────────────────────────────────────────
+const DRIVE_EXPORT = {
+  'application/vnd.google-apps.document':    { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' },
+  'application/vnd.google-apps.spreadsheet': { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      ext: 'xlsx' },
+  'application/vnd.google-apps.presentation':{ mime: 'application/pdf', ext: 'pdf' },
+};
+
+let pickerApiLoaded = false;
+function loadPicker() {
+  return new Promise((resolve, reject) => {
+    if (pickerApiLoaded) return resolve();
+    gapi.load('picker', { callback: () => { pickerApiLoaded = true; resolve(); }, onerror: reject });
+  });
+}
+
+let _gisTokenClient = null;
+function requestDriveToken() {
+  return new Promise((resolve, reject) => {
+    if (driveAccessToken) return resolve(driveAccessToken);
+    if (!window.google?.accounts?.oauth2) {
+      return reject(new Error('GIS library not loaded — please refresh the page'));
+    }
+    if (!_gisTokenClient) {
+      _gisTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.oauthClientId,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: resp => {
+          if (resp.error) return reject(new Error(resp.error_description || resp.error));
+          driveAccessToken = resp.access_token;
+          setTimeout(() => { driveAccessToken = null; }, (Number(resp.expires_in) - 60) * 1000);
+          resolve(driveAccessToken);
+        },
+        error_callback: err => reject(new Error(err.message || err.type)),
+      });
+    }
+    _gisTokenClient.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
+  });
+}
+
+async function openDrivePicker() {
+  if (!CONFIG.pickerApiKey || !CONFIG.oauthClientId) {
+    toast('Drive Picker 尚未設定（見 CONFIG.pickerApiKey / oauthClientId）', true);
+    return;
+  }
+  try {
+    await requestDriveToken();
+  } catch (e) { toast('Drive 授權失敗：' + e.message, true); return; }
+
+  await loadPicker();
+  const view = new google.picker.DocsView()
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setMode(google.picker.DocsViewMode.LIST);
+  const picker = new google.picker.PickerBuilder()
+    .addView(view)
+    .setOAuthToken(driveAccessToken)
+    .setDeveloperKey(CONFIG.pickerApiKey)
+    .setAppId(CONFIG.oauthClientId.split('-')[0])
+    .setCallback(async data => {
+      if (data.action !== google.picker.Action.PICKED) return;
+      const driveDoc = data.docs[0];
+      if (!driveDoc) return;
+      try {
+        await handleDriveFile(driveDoc);
+      } catch (e) {
+        toast('Drive 下載 / 解析失敗：' + e.message, true);
+        dropState('', '');
+      }
+    })
+    .build();
+  picker.setVisible(true);
+}
+
+async function handleDriveFile(driveDoc) {
+  const { id, name, mimeType } = driveDoc;
+  dropState('parsing', `從 Drive 下載：${name}...`);
+
+  let url, filename;
+  if (DRIVE_EXPORT[mimeType]) {
+    const { mime, ext } = DRIVE_EXPORT[mimeType];
+    url = `https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=${encodeURIComponent(mime)}`;
+    filename = name + '.' + ext;
+  } else {
+    url = `https://www.googleapis.com/drive/v3/files/${id}?alt=media`;
+    filename = name;
+  }
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${driveAccessToken}` } });
+  if (!res.ok) throw new Error(`Drive HTTP ${res.status}`);
+  const blob = await res.blob();
+  const file = new File([blob], filename, { type: blob.type });
+  await handleFile(file);
+}
+
+$('drivePickBtn').addEventListener('click', openDrivePicker);
+
+// ── Docs list (from Firestore rag_docs) ─────────────────────────
+async function loadDocs() {
+  $('docsTbody').innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">載入中...</td></tr>';
+  try {
+    const snap = await getDocs(query(collection(db, 'rag_docs'), orderBy('uploadedAt', 'desc')));
+    const tbody = $('docsTbody');
+    tbody.innerHTML = '';
+    $('docsEmpty').style.display = snap.empty ? 'block' : 'none';
+    snap.forEach(docSnap => {
+      const d = docSnap.data();
+      const tr = document.createElement('tr');
+      const when = d.uploadedAt?.toDate ? d.uploadedAt.toDate().toLocaleString('zh-TW')
+        : (d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('zh-TW') : '-');
+      tr.innerHTML = `
+        <td>${escapeHtml(d.name || docSnap.id)}</td>
+        <td><code style="font-size:12px;color:rgba(255,255,255,0.55)">${escapeHtml(docSnap.id)}</code></td>
+        <td><span class="pill">${escapeHtml(d.product || 'general')}</span></td>
+        <td>${d.chunkCount || 0}</td>
+        <td class="muted">${when}</td>
+        <td><span class="pill ok">ready</span></td>
+        <td><button class="danger" data-id="${escapeHtml(docSnap.id)}">刪除</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('button.danger').forEach(b => {
+      b.addEventListener('click', () => deleteDocById(b.dataset.id));
+    });
+  } catch (e) {
+    $('docsTbody').innerHTML = '';
+    toast('載入失敗：' + e.message, true);
+  }
+}
+
+async function deleteDocById(id) {
+  if (!confirm(`確定刪除「${id}」？此動作無法復原。`)) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'rag_chunks'), where('docId', '==', id)));
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, 'rag_docs', id));
+    toast(`已刪除（${snap.size} chunks）`);
+    loadDocs();
+  } catch (e) {
+    toast('刪除失敗：' + e.message, true);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Auth (Google Sign-In — Drive scope handled separately via GIS) ──
+function showAuthed(user) {
+  currentUser = user;
+  $('authStatus').textContent = `已登入：${user.email}`;
+  $('authBlock').style.display = 'none';
+  $('mainBlock').style.display = 'block';
+  $('logoutBtn').style.display = 'inline-block';
+  loadDocs();
+}
+
+function showLoggedOut() {
+  currentUser = null;
+  driveAccessToken = null;
+  $('authStatus').textContent = '';
+  $('authBlock').style.display = 'block';
+  $('mainBlock').style.display = 'none';
+  $('logoutBtn').style.display = 'none';
+}
+
+$('googleLoginBtn').addEventListener('click', async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    showAuthed(result.user);
+  } catch (e) {
+    toast('登入失敗：' + e.message, true);
+  }
+});
+
+$('logoutBtn').addEventListener('click', async () => {
+  await signOut(auth);
+  showLoggedOut();
+});
+
+// Restore existing session on page load
+onAuthStateChanged(auth, user => {
+  if (user && !currentUser) {
+    showAuthed(user);
+  } else if (!user) {
+    showLoggedOut();
+  }
+});
+
+$('refreshBtn').addEventListener('click', loadDocs);
+
+// ── Upload (chunk → embed via Worker → write Firestore) ──────────
+$('uploadBtn').addEventListener('click', async () => {
+  const docId = $('docId').value.trim();
+  const name = $('docName').value.trim();
+  const product = $('docProduct').value;
+  const text = $('docText').value.trim();
+  if (!docId || !name || !text) { toast('文件 ID、名稱、內容皆為必填', true); return; }
+  if (!/^[\w\-]+$/.test(docId)) { toast('文件 ID 僅允許英數字、底線、連字號', true); return; }
+  if (!currentUser) { toast('請先 Google 登入', true); return; }
+
+  const btn = $('uploadBtn');
+  btn.disabled = true;
+  const setStatus = s => $('uploadStatus').textContent = s;
+
+  try {
+    const chunks = chunkText(text);
+    if (!chunks.length) throw new Error('內容切塊後為空');
+
+    // Embed each chunk sequentially (Workers AI free tier rate limit friendly)
+    const vectors = [];
+    for (let i = 0; i < chunks.length; i++) {
+      setStatus(`建立 embedding ${i + 1} / ${chunks.length}...`);
+      vectors.push(await embedText(chunks[i]));
+    }
+
+    // Write chunks to Firestore in batches of 400 (Firestore batch limit 500)
+    setStatus(`寫入 Firestore（${chunks.length} chunks）...`);
+    const serverTs = serverTimestamp();
+    for (let start = 0; start < chunks.length; start += 400) {
+      const batch = writeBatch(db);
+      for (let i = start; i < Math.min(start + 400, chunks.length); i++) {
+        batch.set(doc(db, 'rag_chunks', `${docId}_${i}`), {
+          docId, docName: name, chunkIndex: i,
+          product: product || 'general',
+          text: chunks[i],
+          embedding: vector(vectors[i]),
+          createdAt: serverTs,
+        });
+      }
+      await batch.commit();
+    }
+
+    // Write doc metadata
+    await setDoc(doc(db, 'rag_docs', docId), {
+      name, product: product || 'general',
+      chunkCount: chunks.length,
+      uploadedAt: serverTs,
+      uploader: currentUser.email,
+    });
+
+    toast(`✅ 已建立 ${chunks.length} 個向量`);
+    $('docText').value = '';
+    $('docId').value = '';
+    $('docName').value = '';
+    dropState('', '');
+    loadDocs();
+  } catch (e) {
+    toast('上傳失敗：' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    setStatus('');
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────
+renderProducts();
+console.log('[admin] initialized — Firebase modular SDK 11.6.0');
+</script>
+</body>
+</html>

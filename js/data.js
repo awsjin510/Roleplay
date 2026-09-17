@@ -128,3 +128,31 @@ export const difficulties = [
   '客戶認為雲端太貴',
   '客戶擔心資安'
 ];
+
+// AI 練習頁的「產品服務」轉盤：與 products 同一組項目，但依銷售優先順序排列（第一項為預設值）
+export const productServices = [
+  '資安服務',
+  'MDR',
+  'SOC',
+  'MSSP',
+  'CMSP',
+  'IDC',
+  'CDN',
+  '資安產品',
+  '雲端服務'
+];
+
+// 「產品服務」為「資安產品」時啟用的子轉盤：具體資安產品
+export const securityProducts = [
+  'appGuard',
+  'Ciro',
+  'Akamai API Security',
+  'OKTA',
+  'CyberArk',
+  'Aware',
+  'Bitsight',
+  'Cyble',
+  'Fortify',
+  'Security Scorecard',
+  'Trellix DLP'
+];
