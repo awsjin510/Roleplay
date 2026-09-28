@@ -144,7 +144,7 @@ function ApiKeyModal({ onSaved }) {
       <div style={{ background:'#111827', border:'1px solid rgba(99,102,241,0.3)', borderRadius:20, padding:32, maxWidth:440, width:'100%', boxShadow:'0 0 60px rgba(99,102,241,0.2)' }}>
         <div style={{ fontSize:28, textAlign:'center', marginBottom:8 }}>🔑</div>
         <h2 style={{ textAlign:'center', fontSize:18, fontWeight:800, marginBottom:6 }}>設定 Anthropic API Key</h2>
-        <p style={{ color:'rgba(255,255,255,0.5)', fontSize:13, textAlign:'center', marginBottom:20, lineHeight:1.6 }}>
+        <p style={{ color:'var(--text-3)', fontSize:13, textAlign:'center', marginBottom:20, lineHeight:1.6 }}>
           到 <a href="https://console.anthropic.com/settings/keys" target="_blank" style={{color:'#a5b4fc'}}>console.anthropic.com</a> 取得 Key。<br/>
           Key 僅存在你的瀏覽器，不會上傳至伺服器。
         </p>
@@ -362,9 +362,43 @@ async function sendMessage(conversationHistory, systemPrompt, { maxTokens = 1000
     if (m) { try { metrics = JSON.parse(m[1]); } catch {} }
     return { text: stripMetrics(raw), metrics };
   } catch (e) {
-    return { text: `（錯誤：${e.message}）`, metrics: null };
+    // error 欄位讓呼叫端用提示條顯示，而不是把錯誤當成客戶的對話
+    return { text: `（錯誤：${e.message}）`, metrics: null, error: e.message || 'unknown error' };
   }
 }
+
+// 錯誤訊息轉成使用者看得懂的中文
+function describeApiError(msg = '') {
+  if (/invalid x-api-key|api key is invalid|authentication|401/i.test(msg)) return { text: 'API Key 無效或已失效，請更換 Key 後再試。', needsKey: true };
+  if (/rate|429|overloaded|529/i.test(msg)) return { text: 'AI 服務目前忙碌中，請稍等幾秒再重試。' };
+  if (/credit|billing|balance/i.test(msg)) return { text: 'API 帳戶額度不足，請確認 Anthropic 帳單設定。', needsKey: true };
+  if (/failed to fetch|network|load failed/i.test(msg)) return { text: '網路連線失敗，請確認網路後重試。' };
+  return { text: `AI 回覆失敗：${msg}` };
+}
+
+// ============================================================
+// MODAL（Esc 與點背景都能關閉）
+// ============================================================
+function Modal({ onClose, maxWidth = 640, accent, labelledBy, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+  return (
+    <div className="ui-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ui-modal" role="dialog" aria-modal="true" aria-labelledby={labelledBy}
+        style={{ maxWidth, ...(accent ? { borderColor: accent } : {}) }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// 練習者名稱正規化：「Jin」「jin 」視為同一人
+const nameKey = (n) => (n || '匿名').trim().toLowerCase();
 
 // ============================================================
 // SIMPLE SVG LINE CHART (no external dependencies)
@@ -381,11 +415,11 @@ function SimpleLineChart({ data }) {
       {[0,50,100].map(v=>(
         <g key={v}>
           <line x1={pad.l} x2={W-pad.r} y1={yS(v)} y2={yS(v)} stroke="rgba(255,255,255,0.07)" strokeWidth={1}/>
-          <text x={pad.l-3} y={yS(v)+3.5} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8}>{v}</text>
+          <text x={pad.l-3} y={yS(v)+3.5} textAnchor="end" fill="rgba(241,245,249,0.55)" fontSize={8}>{v}</text>
         </g>
       ))}
       {data.map((_,i)=>(
-        <text key={i} x={xS(i)} y={H-4} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize={8}>{i}</text>
+        <text key={i} x={xS(i)} y={H-4} textAnchor="middle" fill="rgba(241,245,249,0.55)" fontSize={8}>{i}</text>
       ))}
       {[['信任度','#6366f1'],['興趣度','#a855f7'],['購買意願','#06b6d4']].map(([key,stroke])=>(
         <polyline key={key} points={pts(key)} fill="none" stroke={stroke} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
@@ -412,7 +446,7 @@ function CircularGauge({ label, value, color }) {
           <span style={{fontSize:20,fontWeight:700,color:'white'}}>{value}</span>
         </div>
       </div>
-      <span style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.55)'}}>{label}</span>
+      <span style={{fontSize:12,fontWeight:500,color:'var(--text-3)'}}>{label}</span>
     </div>
   );
 }
@@ -425,7 +459,6 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger, wide }) {
   const [spinning, setSpinning] = useState(false);
   const tmr = useRef(null);
   const isRed = data.color === 'red';
-  const gc = isRed ? '#ef4444' : '#6366f1';
   const n = data.items.length;
 
   const step = useCallback((dir) => {
@@ -464,37 +497,26 @@ function SlotColumn({ category, data, onSpinComplete, spinTrigger, wide }) {
     return { idx, item: data.items[idx], isSel: offset === 0 };
   });
 
-  const navBtn = (dir, label) => (
-    <button onClick={()=>step(dir)} disabled={spinning} style={{
-      width:'100%',padding:'6px 0',background:'rgba(255,255,255,0.04)',
-      border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,color:'rgba(255,255,255,0.45)',
-      fontSize:15,cursor:spinning?'not-allowed':'pointer',lineHeight:1,
-      transition:'all 0.15s',opacity:spinning?0.3:1}}>
+  const navBtn = (dir, label, aria) => (
+    <button className="slot__nav" onClick={()=>step(dir)} disabled={spinning} aria-label={`${category}：${aria}`}>
       {label}
     </button>
   );
 
+  // 單欄的「轉」用低調的外框按鈕，讓畫面上唯一的實心漸層留給「開始角色扮演練習」
   return (
-    <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:'18px 12px',display:'flex',flexDirection:'column',alignItems:'center',gap:7,flex:wide?1.8:1,minWidth:wide?200:145}}>
-      <div style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.6)',letterSpacing:'0.04em'}}>{data.icon} {category}</div>
-      {navBtn(-1, '▲')}
-      <div style={{width:'100%',borderRadius:10,background:'rgba(0,0,0,0.3)',padding:'8px 6px',display:'flex',flexDirection:'column',gap:4,overflow:'hidden'}}>
+    <div className={`slot${wide?' slot--wide':''}${isRed?' slot--danger':''}`}>
+      <div className="slot__label">{data.icon} {category}</div>
+      {navBtn(-1, '▲', '上一個')}
+      <div className="slot__window" aria-live="polite">
         {window5.map(({idx,item,isSel})=>(
-          <div key={idx} style={{padding:'9px 8px',borderRadius:8,textAlign:'center',fontSize:13,
-            fontWeight:isSel?700:400,color:isSel?'white':'rgba(255,255,255,0.3)',
-            background:isSel?`rgba(${isRed?'239,68,68':'99,102,241'},0.2)`:'transparent',
-            border:isSel?`1px solid ${gc}55`:'1px solid transparent',
-            boxShadow:isSel?`0 0 10px ${gc}30`:'none',transition:'all 0.08s ease'}}>
+          <div key={idx} className={`slot__item${isSel?' slot__item--sel':''}`} aria-hidden={!isSel}>
             {item}
           </div>
         ))}
       </div>
-      {navBtn(1, '▼')}
-      <button onClick={doSpin} disabled={spinning} style={{
-        width:'100%',padding:'10px 0',
-        background:spinning?'rgba(255,255,255,0.05)':`linear-gradient(135deg,${gc},${isRed?'#dc2626':'#a855f7'})`,
-        border:'none',borderRadius:8,color:'white',fontWeight:600,fontSize:13,
-        cursor:spinning?'not-allowed':'pointer',opacity:spinning?0.5:1,transition:'all 0.2s'}}>
+      {navBtn(1, '▼', '下一個')}
+      <button className="ui-btn ui-btn--ghost ui-btn--sm ui-btn--block slot__spin" onClick={doSpin} disabled={spinning}>
         {spinning?'轉中...':'🎲 轉'}
       </button>
     </div>
@@ -532,67 +554,55 @@ function SetupPhase({ onStart }) {
   const spinAll = ()=>{ setSelections({}); setTriggers(p=>Object.fromEntries(ALL_CATEGORIES.map(c=>[c,p[c]+1]))); };
   const reset = ()=>{ setSelections(Object.fromEntries(BASE_CATEGORIES.map(c=>[c,SLOT_DATA[c].items[0]]))); setTriggers(Object.fromEntries(ALL_CATEGORIES.map(c=>[c,0]))); };
 
+  const start = () => onStart({ ...selections, 業務: getUserName() || '我' });
+  const subSlot = (cat, label, color, divider) => (
+    <div className="sub-slot">
+      <div className="sub-slot__divider" style={{ '--divider': divider }}>
+        <span className="sub-slot__label" style={{ color }}>{label}</span>
+      </div>
+      <div className="sub-slot__body">
+        <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} />
+      </div>
+    </div>
+  );
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:28}}>
       <div style={{textAlign:'center'}}>
-        <h1 style={{fontSize:30,fontWeight:900,background:'linear-gradient(135deg,#6366f1,#a855f7,#06b6d4)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',margin:0}}>
-          🎰 業務角色扮演 AI 練習器
+        <h1 className="page-title">
+          <span className="title-emoji" aria-hidden="true">🎰</span>
+          <span className="gradient-text">業務角色扮演 AI 練習器</span>
         </h1>
-        <p style={{color:'rgba(255,255,255,0.45)',marginTop:10,fontSize:15}}>轉動轉盤，組合情境，與 AI 客戶對話練習</p>
+        <p className="page-subtitle">轉動轉盤，組合情境，與 AI 客戶對話練習</p>
       </div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:12,justifyContent:'center'}}>
+      <div className="slot-grid">
         {BASE_CATEGORIES.map(cat=>(
           <SlotColumn key={cat} category={cat} data={SLOT_DATA[cat]} onSpinComplete={handleDone} spinTrigger={triggers[cat]} wide={cat==='難度'}/>
         ))}
       </div>
-      {isSecurityProduct&&(
-        <div style={{animation:'fadeInUp 0.35s ease'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(239,68,68,0.4))'}}/>
-            <span style={{color:'#fca5a5',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>🔒 資安項目（選擇具體產品）</span>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(239,68,68,0.4),transparent)'}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'center'}}>
-            <div style={{width:200}}>
-              <SlotColumn key="資安項目" category="資安項目" data={SLOT_DATA['資安項目']} onSpinComplete={handleDone} spinTrigger={triggers['資安項目']}/>
-            </div>
-          </div>
-        </div>
-      )}
-      {isCloudProduct&&(
-        <div style={{animation:'fadeInUp 0.35s ease'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,transparent,rgba(6,182,212,0.4))'}}/>
-            <span style={{color:'#67e8f9',fontSize:12,fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>☁️ 雲端環境（選擇雲端平台）</span>
-            <div style={{flex:1,height:'1px',background:'linear-gradient(90deg,rgba(6,182,212,0.4),transparent)'}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'center'}}>
-            <div style={{width:160}}>
-              <SlotColumn key="雲端環境" category="雲端環境" data={SLOT_DATA['雲端環境']} onSpinComplete={handleDone} spinTrigger={triggers['雲端環境']}/>
-            </div>
-          </div>
-        </div>
-      )}
-      <div style={{display:'flex',gap:10,justifyContent:'center'}}>
-        <button onClick={spinAll} style={{padding:'13px 32px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:15,cursor:'pointer',boxShadow:'0 0 28px rgba(99,102,241,0.4)'}}>🎰 全部轉！</button>
-        <button onClick={reset} style={{padding:'13px 22px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.7)',fontWeight:600,fontSize:14,cursor:'pointer'}}>🔄 重置</button>
+      {isSecurityProduct && subSlot('資安項目', '🔒 資安項目（選擇具體產品）', 'var(--danger-soft)', 'rgba(239,68,68,0.4)')}
+      {isCloudProduct && subSlot('雲端環境', '☁️ 雲端環境（選擇雲端平台）', 'var(--cyan-soft)', 'rgba(6,182,212,0.4)')}
+
+      {/* 桌機：置中一排；手機：固定在畫面底部，並多一顆「開始練習」 */}
+      <div className="action-bar">
+        <button className="ui-btn ui-btn--secondary ui-btn--lg" onClick={spinAll}>🎰 全部轉！</button>
+        <button className="ui-btn ui-btn--ghost ui-btn--lg" onClick={reset}>🔄 重置</button>
+        <button className="ui-btn ui-btn--primary ui-btn--lg mobile-only" onClick={start} disabled={!allSpun}>🎯 開始練習</button>
       </div>
+
       {allSpun&&(
-        <div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:16,padding:18,animation:'fadeInUp 0.4s ease'}}>
-          <h3 style={{color:'rgba(255,255,255,0.75)',margin:'0 0 12px 0',fontSize:14}}>📋 你的練習情境</h3>
-          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:18}}>
-            <div style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'7px 13px',fontSize:12}}>
-              <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>👤 業務</span>
-              <span style={{color:'#a5b4fc',fontWeight:700}}>{getUserName()||'我'}</span>
-            </div>
+        <div className="scenario-card">
+          <h3 className="scenario-card__title">📋 你的練習情境</h3>
+          <div className="chip-row" style={{marginBottom:18}}>
+            <span className="chip"><span className="chip__key">👤 業務</span><span className="chip__val">{getUserName()||'我'}</span></span>
             {requiredCats.map(cat=>(
-              <div key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='雲端環境'?'rgba(6,182,212,0.3)':'rgba(255,255,255,0.1)'}`,borderRadius:10,padding:'7px 13px',fontSize:12}}>
-                <span style={{color:'rgba(255,255,255,0.4)',marginRight:4}}>{SLOT_DATA[cat].icon} {cat}</span>
-                <span style={{color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'#a5b4fc',fontWeight:700}}>{selections[cat]}</span>
-              </div>
+              <span key={cat} className={`chip${cat==='難度'?' chip--danger':cat==='雲端環境'?' chip--cyan':''}`}>
+                <span className="chip__key">{SLOT_DATA[cat].icon} {cat}</span>
+                <span className="chip__val">{selections[cat]}</span>
+              </span>
             ))}
           </div>
-          <button onClick={()=>onStart({...selections, 業務: getUserName()||'我'})} style={{width:'100%',padding:'15px 0',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:16,cursor:'pointer',boxShadow:'0 0 28px rgba(99,102,241,0.5)'}}>
+          <button className="ui-btn ui-btn--primary ui-btn--lg ui-btn--block desktop-only" onClick={start}>
             🎯 開始角色扮演練習
           </button>
         </div>
@@ -604,8 +614,11 @@ function SetupPhase({ onStart }) {
 // ============================================================
 // CHAT PHASE
 // ============================================================
-function ChatPhase({ scenario, onEnd }) {
+function ChatPhase({ scenario, onEnd, paused = false, onChangeKey }) {
   const [messages,setMessages]=useState([]);
+  const [chatError,setChatError]=useState(null); // { text, needsKey, isFirst }
+  const pausedRef=useRef(paused);
+  useEffect(()=>{ pausedRef.current=paused; },[paused]);
   const [metrics,setMetrics]=useState({trust:65,interest:65,buyIntent:55});
   const [mHistory,setMHistory]=useState([{trust:65,interest:65,buyIntent:55}]);
   const [input,setInput]=useState('');
@@ -625,14 +638,15 @@ function ChatPhase({ scenario, onEnd }) {
   const apiMsgs=useRef([{role:'user',content:'（場景開始：業務人員剛走進你的辦公室，請你先開口說話）'}]);
   const sys=useRef(buildSystemPrompt(scenario));
 
-  // 計時器：AI 回覆完畢後啟動，使用者送出後停止
+  // 計時器：AI 回覆完畢後啟動，使用者送出後停止；AI 回覆失敗時不計時；開著排行榜/記錄彈窗時暫停
   useEffect(()=>{
-    if(!loading && messages.length>0){
+    if(!loading && messages.length>0 && !chatError){
       setTimeLeft(120);
       setOvertime(0);
       overtimeRef.current=0;
       clearInterval(timerRef.current);
       timerRef.current=setInterval(()=>{
+        if(pausedRef.current) return;
         setTimeLeft(t=>{
           if(t>0) return t-1;
           // 進入超時階段：持續計秒，每 10 秒扣 1 信任度
@@ -649,19 +663,27 @@ function ChatPhase({ scenario, onEnd }) {
         });
       },1000);
     }
-    if(loading){
+    if(loading || chatError){
       clearInterval(timerRef.current);
       setTimeLeft(null);
       setOvertime(0);
       overtimeRef.current=0;
     }
     return ()=>clearInterval(timerRef.current);
-  },[loading,messages.length]);
+  },[loading,messages.length,chatError]);
 
   // 向 AI 客戶要一輪回覆：串流顯示逐字內容，收完後才寫入正式訊息列
   const askAI=async(isFirst=false)=>{
     setStreamText('');
+    setChatError(null);
     const r=await sendMessage(apiMsgs.current,sys.current,{stream:true,onDelta:setStreamText});
+    if(r.error){
+      // 失敗時不寫入對話紀錄；使用者訊息仍留在 apiMsgs，重試會原樣重送
+      setStreamText('');
+      setChatError({...describeApiError(r.error), isFirst});
+      setLoading(false);
+      return;
+    }
     apiMsgs.current.push({role:'assistant',content:r.text});
     setMessages(p=>[...p,{role:'assistant',content:r.text}]);
     if(r.metrics){setMetrics(r.metrics);setMHistory(p=>(isFirst?[r.metrics]:[...p,r.metrics]));}
@@ -729,110 +751,110 @@ function ChatPhase({ scenario, onEnd }) {
 
   const hint=()=>{setToast(HINTS[Math.floor(Math.random()*HINTS.length)]);setTimeout(()=>setToast(null),3500);};
   const end=()=>onEnd(scenario,messages.map(m=>`${m.role==='user'?'業務':'客戶'}: ${m.content}`).join('\n\n'),mHistory);
+  const retry=()=>{ const first=chatError?.isFirst; setLoading(true); askAI(first); };
 
   const bubble=(msg,i,isStreaming)=>(
-    <div key={isStreaming?'streaming':i} style={{display:'flex',justifyContent:msg.role==='user'?'flex-end':'flex-start',animation:'fadeInUp 0.25s ease'}}>
-      <div style={{maxWidth:'75%',padding:'12px 16px',
-        borderRadius:msg.role==='user'?'18px 18px 4px 18px':'18px 18px 18px 4px',
-        background:msg.role==='user'?'linear-gradient(135deg,#6366f1,#a855f7)':'rgba(255,255,255,0.06)',
-        border:msg.role==='user'?'none':'1px solid rgba(255,255,255,0.08)',
-        fontSize:15,lineHeight:1.7,color:'white'}}>
-        <div style={{fontSize:12,color:'rgba(255,255,255,0.45)',marginBottom:5}}>{msg.role==='user'?`👤 ${scenario.業務}`:'🤖 客戶'}</div>
+    <div key={isStreaming?'streaming':i} className={`bubble-row${msg.role==='user'?' bubble-row--user':''}`}>
+      <div className={`bubble${msg.role==='user'?' bubble--user':''}`}>
+        <div className="bubble__who">{msg.role==='user'?`👤 ${scenario.業務}`:'🤖 客戶'}</div>
         {msg.content}
       </div>
     </div>
   );
 
-  return(
-    <div style={{display:'flex',flexDirection:'column',height:'100dvh'}}>
-      {toast&&<div style={{position:'fixed',top:14,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.96)',color:'white',padding:'12px 20px',borderRadius:12,fontSize:15,maxWidth:400,textAlign:'center',zIndex:1000,boxShadow:'0 8px 32px rgba(0,0,0,0.3)',animation:'fadeInDown 0.3s ease'}}>💡 {toast}</div>}
+  const GAUGES=[['信任度','trust','#6366f1'],['興趣度','interest','#a855f7'],['購買意願','buyIntent','#06b6d4']];
+  const timerTone = timeLeft<=10 ? ['rgba(239,68,68,0.15)','rgba(239,68,68,0.4)','#fca5a5'] : timeLeft<=30 ? ['rgba(245,158,11,0.15)','rgba(245,158,11,0.35)','#fcd34d'] : ['rgba(34,197,94,0.12)','rgba(34,197,94,0.3)','#86efac'];
 
-      <div style={{background:'rgba(0,0,0,0.45)',borderBottom:'1px solid rgba(255,255,255,0.07)',padding:'10px 16px',display:'flex',flexDirection:'column',gap:7,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-          <span style={{color:'rgba(255,255,255,0.4)',fontSize:13,marginRight:3}}>情境</span>
+  return(
+    <div className="chat-shell">
+      {toast&&<div className="toast" role="status">💡 {toast}</div>}
+
+      <div className="chat-header">
+        <div className="chip-row chip-row--scroll">
+          <span className="chat-header__label">情境</span>
           {ALL_CATEGORIES.filter(cat=>scenario[cat]!==undefined).map(cat=>(
-            <span key={cat} style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${cat==='難度'?'rgba(239,68,68,0.25)':cat==='雲端環境'?'rgba(6,182,212,0.25)':'rgba(255,255,255,0.08)'}`,borderRadius:6,padding:'3px 10px',fontSize:13,color:cat==='難度'?'#fca5a5':cat==='雲端環境'?'#67e8f9':'rgba(255,255,255,0.75)'}}>
+            <span key={cat} className={`chip${cat==='難度'?' chip--danger':cat==='雲端環境'?' chip--cyan':''}`}>
               {SLOT_DATA[cat].icon} {scenario[cat]}
             </span>
           ))}
-          {ragActive&&(
-            <span style={{background:'rgba(34,197,94,0.15)',border:'1px solid rgba(34,197,94,0.35)',borderRadius:6,padding:'3px 10px',fontSize:13,color:'#86efac'}}>
-              📚 知識庫已載入
-            </span>
-          )}
+          {ragActive&&<span className="chip chip--success">📚 知識庫已載入</span>}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:600,color:'#a5b4fc'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span className="status-pill" style={{background:'rgba(99,102,241,0.15)',borderColor:'rgba(99,102,241,0.3)',color:'var(--brand-soft)',fontWeight:600}}>
             第 {turns} 輪
           </span>
-          {loading&&<span style={{fontSize:13,color:'rgba(255,255,255,0.4)'}}>AI 回覆中...</span>}
+          {loading&&<span style={{fontSize:13,color:'var(--text-3)'}}>AI 回覆中...</span>}
           {!loading&&timeLeft!==null&&overtime===0&&(
-            <span style={{
-              display:'flex',alignItems:'center',gap:5,
-              background:timeLeft<=10?'rgba(239,68,68,0.15)':timeLeft<=30?'rgba(245,158,11,0.15)':'rgba(34,197,94,0.12)',
-              border:`1px solid ${timeLeft<=10?'rgba(239,68,68,0.4)':timeLeft<=30?'rgba(245,158,11,0.35)':'rgba(34,197,94,0.3)'}`,
-              borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:700,
-              color:timeLeft<=10?'#fca5a5':timeLeft<=30?'#fcd34d':'#86efac',
-              animation:timeLeft<=10?'pulse 0.8s ease-in-out infinite':'none',
-            }}>
-              ⏱ {timeLeft}s
+            <span className="status-pill" style={{background:timerTone[0],borderColor:timerTone[1],color:timerTone[2],animation:timeLeft<=10?'pulse 0.8s ease-in-out infinite':'none'}}>
+              ⏱ {timeLeft}s{paused?'（暫停）':''}
             </span>
           )}
           {!loading&&overtime>0&&(
-            <span style={{
-              display:'flex',alignItems:'center',gap:5,
-              background:'rgba(239,68,68,0.2)',
-              border:'1px solid rgba(239,68,68,0.6)',
-              borderRadius:6,padding:'3px 12px',fontSize:14,fontWeight:700,
-              color:'#f87171',
-              animation:'pulse 0.8s ease-in-out infinite',
-            }}>
+            <span className="status-pill" style={{background:'rgba(239,68,68,0.2)',borderColor:'rgba(239,68,68,0.6)',color:'#f87171',animation:'pulse 0.8s ease-in-out infinite'}}>
               ⏰ 超時 +{overtime}s {overtime>=10?`(信任 -${Math.floor(overtime/10)})`:'' }
             </span>
           )}
         </div>
       </div>
 
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{flex:1,overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:14}}>
+      {/* 手機版：教練視角改成一條迷你指標列 */}
+      <div className="coach-strip" aria-label="教練視角">
+        <div className="coach-strip__metrics">
+          {GAUGES.map(([label,key,color])=>(
+            <div key={key} className="metric">
+              <div className="metric__top"><span>{label}</span><span className="metric__value">{metrics[key]}</span></div>
+              <div className="metric__bar"><div className="metric__fill" style={{width:`${Math.max(0,Math.min(100,metrics[key]))}%`,background:color}}/></div>
+            </div>
+          ))}
+        </div>
+        {metrics.notes&&<div className="coach-notes" title={metrics.notes}>🎓 {metrics.notes}</div>}
+      </div>
+
+      <div className="chat-body">
+        <div className="chat-main">
+          <div className="chat-scroll">
             {messages.map((msg,i)=>bubble(msg,i,false))}
             {loading&&streamText&&bubble({role:'assistant',content:streamText},-1,true)}
             {loading&&!streamText&&(
-              <div style={{display:'flex',justifyContent:'flex-start'}}>
-                <div style={{padding:'12px 18px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'18px 18px 18px 4px',display:'flex',gap:5,alignItems:'center'}}>
-                  {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:'50%',background:'#6366f1',animation:`bounce 1.1s ${i*0.18}s infinite`}}/>)}
+              <div className="bubble-row">
+                <div className="bubble" style={{display:'flex',gap:5,alignItems:'center',padding:'14px 18px'}} aria-label="AI 回覆中">
+                  {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:'50%',background:'var(--brand)',animation:`bounce 1.1s ${i*0.18}s infinite`}}/>)}
                 </div>
+              </div>
+            )}
+            {chatError&&!loading&&(
+              <div className="ui-alert" role="alert">
+                <span className="ui-alert__text">⚠️ {chatError.text}</span>
+                <span className="ui-alert__actions">
+                  {chatError.needsKey&&onChangeKey&&<button className="ui-btn ui-btn--ghost ui-btn--sm" onClick={onChangeKey}>🔑 更換 Key</button>}
+                  <button className="ui-btn ui-btn--danger ui-btn--sm" onClick={retry}>🔄 重試</button>
+                </span>
               </div>
             )}
             <div ref={endRef}/>
           </div>
 
-          <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'12px 14px',display:'flex',gap:10,flexShrink:0,alignItems:'flex-end'}}>
-            <textarea value={input} onChange={e=>setInput(e.target.value)}
-              onKeyDown={e=>{}}
-              placeholder={`輸入 ${scenario.業務} 的回應... (點擊右下角「發送」送出)`} disabled={loading}
-              rows={3}
-              style={{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:'12px 16px',color:'white',fontSize:15,outline:'none',resize:'none',lineHeight:1.5,fontFamily:'inherit'}}/>
-            <button onClick={toggleVoice} disabled={loading} title={speaking?'停止錄音':'語音輸入'}
-              style={{padding:'12px 14px',background:speaking?'rgba(239,68,68,0.25)':'rgba(255,255,255,0.07)',border:`1px solid ${speaking?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)'}`,borderRadius:10,color:speaking?'#f87171':'rgba(255,255,255,0.7)',fontSize:20,cursor:loading?'not-allowed':'pointer',flexShrink:0,lineHeight:1,animation:speaking?'micPulse 1s ease-in-out infinite':undefined}}>
+          <div className="composer">
+            <textarea className="composer__input" value={input} onChange={e=>setInput(e.target.value)}
+              placeholder={`輸入 ${scenario.業務} 的回應…`} disabled={loading}
+              rows={2} aria-label="你的回應"/>
+            <button className={`ui-btn ui-btn--ghost composer__mic${speaking?' composer__mic--on':''}`} onClick={toggleVoice} disabled={loading}
+              title={speaking?'停止錄音':'語音輸入'} aria-label={speaking?'停止錄音':'語音輸入'}>
               {speaking?'⏹':'🎙'}
             </button>
-            <button onClick={send} disabled={loading||!input.trim()} style={{padding:'12px 20px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:600,fontSize:15,cursor:loading||!input.trim()?'not-allowed':'pointer',opacity:loading||!input.trim()?0.45:1,flexShrink:0}}>發送</button>
+            <button className="ui-btn ui-btn--primary" onClick={send} disabled={loading||!input.trim()||!!chatError}>發送</button>
           </div>
-          <div style={{borderTop:'1px solid rgba(255,255,255,0.05)',padding:'8px 14px',display:'flex',gap:10,flexShrink:0}}>
-            <button onClick={hint} style={{padding:'8px 16px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.7)',fontSize:14,cursor:'pointer'}}>💡 提示</button>
-            <button onClick={end} disabled={messages.length<2} style={{padding:'8px 16px',background:messages.length>=2?'rgba(239,68,68,0.12)':'rgba(255,255,255,0.04)',border:`1px solid ${messages.length>=2?'rgba(239,68,68,0.28)':'rgba(255,255,255,0.07)'}`,borderRadius:8,color:messages.length>=2?'#fca5a5':'rgba(255,255,255,0.28)',fontSize:14,cursor:messages.length>=2?'pointer':'not-allowed'}}>🏁 結束並覆盤</button>
+          <div className="chat-tools">
+            <button className="ui-btn ui-btn--ghost ui-btn--sm" onClick={hint}>💡 提示</button>
+            <button className="ui-btn ui-btn--danger ui-btn--sm" onClick={end} disabled={messages.length<2}>🏁 結束並覆盤</button>
           </div>
         </div>
 
-        <div style={{width:210,borderLeft:'1px solid rgba(255,255,255,0.06)',padding:'16px 12px',display:'flex',flexDirection:'column',gap:20,alignItems:'center',flexShrink:0,overflowY:'auto'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.5)',textAlign:'center',letterSpacing:'0.06em'}}>🎓 教練視角</div>
-          <CircularGauge label="信任度" value={metrics.trust} color="#6366f1"/>
-          <CircularGauge label="興趣度" value={metrics.interest} color="#a855f7"/>
-          <CircularGauge label="購買意願" value={metrics.buyIntent} color="#06b6d4"/>
-          {metrics.notes&&<div style={{fontSize:12,color:'rgba(255,255,255,0.5)',textAlign:'center',lineHeight:1.6,padding:'0 4px'}}>{metrics.notes}</div>}
-        </div>
+        <aside className="coach-panel" aria-label="教練視角">
+          <div className="coach-panel__title">🎓 教練視角</div>
+          {GAUGES.map(([label,key,color])=><CircularGauge key={key} label={label} value={metrics[key]} color={color}/>)}
+          {metrics.notes&&<div className="coach-notes">{metrics.notes}</div>}
+        </aside>
       </div>
     </div>
   );
@@ -847,6 +869,7 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
   useEffect(()=>{
     (async()=>{
       const r=await sendMessage([{role:'user',content:buildReviewPrompt(scenario,log,mHistory)}],'你是資深銷售培訓教練，用JSON格式提供覆盤。',{maxTokens:2000});
+      if(r.error){ setReview({error:true,msg:describeApiError(r.error).text}); setLoading(false); return; }
       try{
         // 用深度追蹤正確擷取最外層 JSON 物件
         const extractJSON=(s)=>{const i=s.indexOf('{');if(i<0)return null;let d=0;for(let j=i;j<s.length;j++){if(s[j]==='{')d++;else if(s[j]==='}'){d--;if(d===0)return s.slice(i,j+1);}}return null;};
@@ -881,13 +904,18 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
   if(loading) return(
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',gap:18}}>
       <div style={{width:52,height:52,border:'4px solid rgba(99,102,241,0.2)',borderTop:'4px solid #6366f1',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
-      <p style={{color:'rgba(255,255,255,0.5)',fontSize:14}}>AI 教練分析中...</p>
+      <p style={{color:'var(--text-3)',fontSize:14}}>AI 教練分析中...</p>
     </div>
   );
   if(!review||review.error) return(
-    <div style={{padding:20,textAlign:'center'}}>
-      <p style={{color:'rgba(255,255,255,0.5)',marginBottom:12}}>覆盤失敗，請重試</p>
-      <button onClick={onRetry} style={{padding:'10px 24px',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:8,color:'white',cursor:'pointer',fontWeight:600}}>🔄 再試</button>
+    <div style={{padding:'40px 0',display:'flex',flexDirection:'column',gap:14,alignItems:'center'}}>
+      <div className="ui-alert" role="alert" style={{width:'100%'}}>
+        <span className="ui-alert__text">⚠️ {review?.msg || '覆盤報告產生失敗，AI 回傳的格式無法解析。'}</span>
+      </div>
+      <div style={{display:'flex',gap:10}}>
+        <button className="ui-btn ui-btn--primary" onClick={onRetry}>🔄 重新練習</button>
+        <button className="ui-btn ui-btn--ghost" onClick={onNew}>🎲 換情境</button>
+      </div>
     </div>
   );
 
@@ -907,26 +935,26 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
           </svg>
           <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
             <span style={{fontSize:20,fontWeight:800,color}}>{score}</span>
-            <span style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>/ 100</span>
+            <span style={{fontSize:10,color:'var(--text-3)'}}>/ 100</span>
           </div>
         </div>
         <div>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
             <span style={{fontSize:32,fontWeight:900,color}}>{grade}</span>
-            <span style={{fontSize:12,color:'rgba(255,255,255,0.4)'}}>等級</span>
+            <span style={{fontSize:12,color:'var(--text-3)'}}>等級</span>
           </div>
-          <p style={{color:'rgba(255,255,255,0.7)',fontSize:13,lineHeight:1.6,margin:0}}>{review.summary}</p>
+          <p style={{color:'var(--text-2)',fontSize:13,lineHeight:1.6,margin:0}}>{review.summary}</p>
         </div>
       </div>
 
       {chartData.length>1&&(
         <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,padding:16}}>
-          <h4 style={{color:'rgba(255,255,255,0.7)',margin:'0 0 12px 0',fontSize:13}}>📈 指標趨勢</h4>
+          <h4 style={{color:'var(--text-2)',margin:'0 0 12px 0',fontSize:13}}>📈 指標趨勢</h4>
           <SimpleLineChart data={chartData}/>
           <div style={{display:'flex',gap:12,justifyContent:'center',marginTop:4}}>
             {[['信任度','#6366f1'],['興趣度','#a855f7'],['購買意願','#06b6d4']].map(([l,c])=>(
               <div key={l} style={{display:'flex',alignItems:'center',gap:3}}>
-                <div style={{width:10,height:3,background:c,borderRadius:2}}/><span style={{fontSize:10,color:'rgba(255,255,255,0.45)'}}>{l}</span>
+                <div style={{width:10,height:3,background:c,borderRadius:2}}/><span style={{fontSize:10,color:'var(--text-3)'}}>{l}</span>
               </div>
             ))}
           </div>
@@ -937,16 +965,16 @@ function ReviewPhase({ scenario, log, mHistory, onRetry, onNew }) {
         .filter(s=>s.items?.length).map(({icon,title,items,c})=>(
         <div key={title} style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:16}}>
           <h4 style={{color:'rgba(255,255,255,0.78)',margin:'0 0 10px 0',fontSize:13}}>{icon} {title}</h4>
-          {items.map((item,i)=><div key={i} style={{display:'flex',gap:7,color:'rgba(255,255,255,0.62)',fontSize:13,lineHeight:1.6,marginBottom:i<items.length-1?7:0}}><span style={{color:c,flexShrink:0}}>•</span>{item}</div>)}
+          {items.map((item,i)=><div key={i} style={{display:'flex',gap:7,color:'var(--text-2)',fontSize:13,lineHeight:1.6,marginBottom:i<items.length-1?7:0}}><span style={{color:c,flexShrink:0}}>•</span>{item}</div>)}
         </div>
       ))}
 
-      {review.keyMoment&&<div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:14,padding:16}}><h4 style={{color:'rgba(255,255,255,0.78)',margin:'0 0 8px 0',fontSize:13}}>🔑 關鍵轉折</h4><p style={{color:'rgba(255,255,255,0.58)',fontSize:13,lineHeight:1.6,margin:0}}>「{review.keyMoment}」</p></div>}
-      {review.coachAdvice&&<div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.18)',borderRadius:14,padding:16}}><h4 style={{color:'rgba(255,255,255,0.78)',margin:'0 0 8px 0',fontSize:13}}>💡 教練建議</h4><p style={{color:'rgba(255,255,255,0.58)',fontSize:13,lineHeight:1.6,margin:0}}>{review.coachAdvice}</p></div>}
+      {review.keyMoment&&<div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:14,padding:16}}><h4 style={{color:'rgba(255,255,255,0.78)',margin:'0 0 8px 0',fontSize:13}}>🔑 關鍵轉折</h4><p style={{color:'var(--text-2)',fontSize:13,lineHeight:1.6,margin:0}}>「{review.keyMoment}」</p></div>}
+      {review.coachAdvice&&<div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.18)',borderRadius:14,padding:16}}><h4 style={{color:'rgba(255,255,255,0.78)',margin:'0 0 8px 0',fontSize:13}}>💡 教練建議</h4><p style={{color:'var(--text-2)',fontSize:13,lineHeight:1.6,margin:0}}>{review.coachAdvice}</p></div>}
 
       <div style={{display:'flex',gap:10}}>
-        <button onClick={onRetry} style={{flex:1,padding:'13px 0',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:12,color:'white',fontWeight:700,fontSize:14,cursor:'pointer'}}>🔄 再練一次</button>
-        <button onClick={onNew} style={{flex:1,padding:'13px 0',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.7)',fontWeight:600,fontSize:14,cursor:'pointer'}}>🎲 換情境</button>
+        <button className="ui-btn ui-btn--primary ui-btn--lg" style={{flex:1}} onClick={onRetry}>🔄 再練一次</button>
+        <button className="ui-btn ui-btn--ghost ui-btn--lg" style={{flex:1}} onClick={onNew}>🎲 換情境</button>
       </div>
     </div>
   );
@@ -965,12 +993,13 @@ function LeaderboardModal({ onClose }) {
       // 聚合每個練習者的統計
       const map = {};
       records.forEach(r => {
-        const name = r.practitioner || '匿名';
-        if (!map[name]) map[name] = { name, count: 0, totalScore: 0, bestScore: 0, scores: [] };
-        map[name].count += 1;
-        map[name].totalScore += (r.score || 0);
-        map[name].bestScore = Math.max(map[name].bestScore, r.score || 0);
-        map[name].scores.push(r.score || 0);
+        // 以不分大小寫、去空白的名稱合併同一人；顯示第一次出現的寫法
+        const key = nameKey(r.practitioner);
+        if (!map[key]) map[key] = { name: (r.practitioner || '匿名').trim(), count: 0, totalScore: 0, bestScore: 0, scores: [] };
+        map[key].count += 1;
+        map[key].totalScore += (r.score || 0);
+        map[key].bestScore = Math.max(map[key].bestScore, r.score || 0);
+        map[key].scores.push(r.score || 0);
       });
       const list = Object.values(map).map(p => ({
         ...p,
@@ -996,29 +1025,29 @@ function LeaderboardModal({ onClose }) {
   const sortLabel = { total: '累計總分', count: '練習次數', avg: '平均分' };
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
-      <div style={{background:'#111827',border:'1px solid rgba(255,215,0,0.2)',borderRadius:20,width:'100%',maxWidth:560,padding:24,boxShadow:'0 0 60px rgba(255,215,0,0.08)'}}>
+    <Modal onClose={onClose} maxWidth={560} accent="rgba(255,215,0,0.25)" labelledBy="leaderboard-title">
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-          <h2 style={{margin:0,fontSize:18,fontWeight:800}}>🏆 練習排行榜</h2>
-          <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+          <h2 id="leaderboard-title" style={{margin:0,fontSize:18,fontWeight:800}}>🏆 練習排行榜</h2>
+          <button className="ui-modal__close" onClick={onClose} aria-label="關閉排行榜">✕</button>
         </div>
 
         {/* Sort toggle */}
         <div style={{display:'flex',gap:6,marginBottom:20}}>
           {['total','count','avg'].map(k=>(
             <button key={k} onClick={()=>setSortBy(k)}
-              style={{flex:1,padding:'7px 0',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:sortBy===k?'rgba(255,215,0,0.15)':'transparent',color:sortBy===k?'#ffd700':'rgba(255,255,255,0.4)',fontSize:12,fontWeight:sortBy===k?700:400,cursor:'pointer',transition:'all 0.2s'}}>
+              aria-pressed={sortBy===k}
+              style={{flex:1,minHeight:38,borderRadius:8,border:`1px solid ${sortBy===k?'rgba(255,215,0,0.35)':'var(--line-strong)'}`,background:sortBy===k?'rgba(255,215,0,0.15)':'transparent',color:sortBy===k?'#ffd700':'var(--text-3)',fontSize:13,fontWeight:sortBy===k?700:500,cursor:'pointer',transition:'all 0.2s'}}>
               {sortLabel[k]}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>載入中...</div>
+          <div style={{textAlign:'center',padding:'40px 0',color:'var(--text-3)',fontSize:14}}>載入中...</div>
         ) : sorted.length === 0 ? (
-          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>還沒有練習記錄，完成第一次覆盤後會出現在這裡。</div>
+          <div style={{textAlign:'center',padding:'40px 0',color:'var(--text-3)',fontSize:14}}>還沒有練習記錄，完成第一次覆盤後會出現在這裡。</div>
         ) : (
           <>
             {/* Podium — top 3 */}
@@ -1050,7 +1079,7 @@ function LeaderboardModal({ onClose }) {
             {/* Full ranking list */}
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {sorted.map((p, i) => {
-                const isMe = p.name === getUserName();
+                const isMe = nameKey(p.name) === nameKey(getUserName());
                 const val = sortBy==='total' ? p.totalScore : sortBy==='count' ? p.count : p.avgScore;
                 const unit = sortBy==='count' ? '次' : '分';
                 const rankColor = i===0?'#ffd700':i===1?'#c0c0c0':i===2?'#cd7f32':'rgba(255,255,255,0.3)';
@@ -1062,7 +1091,7 @@ function LeaderboardModal({ onClose }) {
                     <div style={{flex:1,fontWeight:600,fontSize:14,color:isMe?'#a5b4fc':'rgba(255,255,255,0.85)'}}>
                       {p.name}{isMe&&<span style={{fontSize:10,marginLeft:6,color:'rgba(99,102,241,0.8)'}}>（你）</span>}
                     </div>
-                    <div style={{display:'flex',gap:14,fontSize:12,color:'rgba(255,255,255,0.4)'}}>
+                    <div style={{display:'flex',gap:14,fontSize:12,color:'var(--text-3)'}}>
                       <span>{p.count} 次</span>
                       <span>均 {p.avgScore}</span>
                       <span>最高 {p.bestScore}</span>
@@ -1076,8 +1105,7 @@ function LeaderboardModal({ onClose }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1152,8 +1180,10 @@ function HistoryModal({ onClose }) {
     if(expanded===(fsId||localId)) setExpanded(null);
   };
 
-  const names = [...new Set(list.map(r=>r.practitioner).filter(Boolean))];
-  const filtered = filterName ? list.filter(r=>r.practitioner===filterName) : list;
+  // 名稱不分大小寫合併（「Jin」「jin」視為同一人），篩選也以正規化名稱比對
+  const names = [];
+  { const seen = new Set(); list.forEach(r => { if (!r.practitioner) return; const k = nameKey(r.practitioner); if (!seen.has(k)) { seen.add(k); names.push(r.practitioner.trim()); } }); }
+  const filtered = filterName ? list.filter(r=>nameKey(r.practitioner)===nameKey(filterName)) : list;
 
   const fmt = (iso) => {
     const d = new Date(iso);
@@ -1161,31 +1191,30 @@ function HistoryModal({ onClose }) {
   };
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
-      <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.25)',borderRadius:20,width:'100%',maxWidth:640,padding:24,boxShadow:'0 0 60px rgba(99,102,241,0.15)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-          <h2 style={{margin:0,fontSize:18,fontWeight:800}}>📋 練習記錄</h2>
+    <Modal onClose={onClose} maxWidth={640} labelledBy="history-title">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:10}}>
+          <h2 id="history-title" style={{margin:0,fontSize:18,fontWeight:800}}>📋 練習記錄</h2>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <button onClick={()=>exportHistoryToExcel(filtered)} disabled={loading||filtered.length===0} title="匯出成 Excel"
-              style={{display:'flex',alignItems:'center',gap:5,padding:'6px 13px',background:(loading||filtered.length===0)?'rgba(255,255,255,0.06)':'linear-gradient(135deg,#16a34a,#22c55e)',border:'none',borderRadius:9,color:'white',fontWeight:700,fontSize:12,cursor:(loading||filtered.length===0)?'not-allowed':'pointer',opacity:(loading||filtered.length===0)?0.5:1}}>📊 匯出 Excel</button>
-            <button onClick={onClose} style={{background:'none',border:'none',color:'rgba(255,255,255,0.45)',fontSize:20,cursor:'pointer',lineHeight:1}}>✕</button>
+            <button className="ui-btn ui-btn--sm" onClick={()=>exportHistoryToExcel(filtered)} disabled={loading||filtered.length===0} title="匯出成 Excel"
+              style={{background:'linear-gradient(135deg,#16a34a,#22c55e)',color:'white'}}>📊 匯出 Excel</button>
+            <button className="ui-modal__close" onClick={onClose} aria-label="關閉練習記錄">✕</button>
           </div>
         </div>
 
         {/* Name filter */}
         {names.length>1 && (
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
-            <button onClick={()=>setFilterName('')} style={{padding:'4px 12px',borderRadius:20,border:'1px solid rgba(255,255,255,0.12)',background:filterName?'transparent':'rgba(99,102,241,0.25)',color:filterName?'rgba(255,255,255,0.45)':'white',fontSize:12,cursor:'pointer'}}>全部</button>
+            <button onClick={()=>setFilterName('')} aria-pressed={!filterName} style={{minHeight:34,padding:'0 14px',borderRadius:20,border:'1px solid var(--line-strong)',background:filterName?'transparent':'rgba(99,102,241,0.25)',color:filterName?'var(--text-3)':'white',fontSize:13,cursor:'pointer'}}>全部</button>
             {names.map(n=>(
-              <button key={n} onClick={()=>setFilterName(n===filterName?'':n)} style={{padding:'4px 12px',borderRadius:20,border:'1px solid rgba(255,255,255,0.12)',background:filterName===n?'rgba(99,102,241,0.25)':'transparent',color:filterName===n?'white':'rgba(255,255,255,0.45)',fontSize:12,cursor:'pointer'}}>{n}</button>
+              <button key={n} onClick={()=>setFilterName(n===filterName?'':n)} aria-pressed={filterName===n} style={{minHeight:34,padding:'0 14px',borderRadius:20,border:'1px solid var(--line-strong)',background:filterName===n?'rgba(99,102,241,0.25)':'transparent',color:filterName===n?'white':'var(--text-3)',fontSize:13,cursor:'pointer'}}>{n}</button>
             ))}
           </div>
         )}
 
         {loading ? (
-          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>載入中...</div>
+          <div style={{textAlign:'center',padding:'40px 0',color:'var(--text-3)',fontSize:14}}>載入中...</div>
         ) : filtered.length===0 ? (
-          <div style={{textAlign:'center',padding:'40px 0',color:'rgba(255,255,255,0.35)',fontSize:14}}>
+          <div style={{textAlign:'center',padding:'40px 0',color:'var(--text-3)',fontSize:14}}>
             還沒有練習記錄，完成第一次覆盤後會自動儲存。
           </div>
         ) : filtered.map(r => {
@@ -1194,7 +1223,7 @@ function HistoryModal({ onClose }) {
           const isOpen = expanded===uid;
           return (
             <div key={uid} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${isOpen?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)'}`,borderRadius:14,marginBottom:10,overflow:'hidden',transition:'border-color 0.2s'}}>
-              <div onClick={()=>setExpanded(isOpen?null:uid)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',cursor:'pointer'}}>
+              <div role="button" tabIndex={0} aria-expanded={isOpen} onClick={()=>setExpanded(isOpen?null:uid)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setExpanded(isOpen?null:uid);}}} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',cursor:'pointer'}}>
                 <div style={{flexShrink:0,width:44,height:44,position:'relative'}}>
                   <svg width={44} height={44} style={{transform:'rotate(-90deg)'}}>
                     <circle cx={22} cy={22} r={18} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={4}/>
@@ -1207,40 +1236,39 @@ function HistoryModal({ onClose }) {
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,flexWrap:'wrap'}}>
                     {r.practitioner && <span style={{fontSize:12,fontWeight:700,color:'rgba(255,255,255,0.9)',background:'rgba(99,102,241,0.2)',padding:'1px 8px',borderRadius:10}}>{r.practitioner}</span>}
                     <span style={{fontSize:13,fontWeight:700,color}}>{r.grade} 等級</span>
-                    <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>{fmt(r.date)}</span>
-                    <span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>· {r.turns} 輪</span>
+                    <span style={{fontSize:11,color:'var(--text-3)'}}>{fmt(r.date)}</span>
+                    <span style={{fontSize:11,color:'var(--text-3)'}}>· {r.turns} 輪</span>
                   </div>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                     {[r.scenario?.業務, r.scenario?.產品服務 || r.scenario?.產品, r.scenario?.資安項目, r.scenario?.產業, r.scenario?.角色].filter(Boolean).map(t=>(
-                      <span key={t} style={{fontSize:10,padding:'2px 7px',background:'rgba(255,255,255,0.07)',borderRadius:20,color:'rgba(255,255,255,0.55)'}}>{t}</span>
+                      <span key={t} style={{fontSize:10,padding:'2px 7px',background:'rgba(255,255,255,0.07)',borderRadius:20,color:'var(--text-3)'}}>{t}</span>
                     ))}
                   </div>
                 </div>
-                <span style={{color:'rgba(255,255,255,0.3)',fontSize:13,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
+                <span style={{color:'var(--text-3)',fontSize:13,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
               </div>
 
               {isOpen && (
                 <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
-                  {r.summary && <p style={{margin:0,fontSize:13,color:'rgba(255,255,255,0.65)',lineHeight:1.6}}>{r.summary}</p>}
+                  {r.summary && <p style={{margin:0,fontSize:13,color:'var(--text-2)',lineHeight:1.6}}>{r.summary}</p>}
                   <div style={{display:'flex',gap:10}}>
                     {[['信任度',r.finalMetrics?.trust,'#6366f1'],['興趣度',r.finalMetrics?.interest,'#a855f7'],['購買意願',r.finalMetrics?.buyIntent,'#06b6d4']].map(([l,v,c])=>(
                       <div key={l} style={{flex:1,background:'rgba(255,255,255,0.04)',borderRadius:10,padding:'8px 10px',textAlign:'center'}}>
                         <div style={{fontSize:18,fontWeight:800,color:c}}>{v}</div>
-                        <div style={{fontSize:10,color:'rgba(255,255,255,0.4)',marginTop:2}}>{l}</div>
+                        <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{l}</div>
                       </div>
                     ))}
                   </div>
-                  {r.strengths?.length>0 && <div><div style={{fontSize:12,color:'#22c55e',fontWeight:600,marginBottom:5}}>✅ 做得好</div>{r.strengths.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}</div>}
-                  {r.improvements?.length>0 && <div><div style={{fontSize:12,color:'#f59e0b',fontWeight:600,marginBottom:5}}>⚠️ 可改進</div>{r.improvements.map((s,i)=><div key={i} style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>• {s}</div>)}</div>}
-                  {r.coachAdvice && <div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.15)',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:12,color:'#22d3ee',fontWeight:600,marginBottom:4}}>💡 教練建議</div><div style={{fontSize:12,color:'rgba(255,255,255,0.55)',lineHeight:1.6}}>{r.coachAdvice}</div></div>}
-                  <button onClick={()=>remove(r.fsId, r.id)} style={{alignSelf:'flex-end',padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,color:'#fca5a5',fontSize:11,cursor:'pointer'}}>🗑 刪除此筆</button>
+                  {r.strengths?.length>0 && <div><div style={{fontSize:12,color:'#22c55e',fontWeight:600,marginBottom:5}}>✅ 做得好</div>{r.strengths.map((s,i)=><div key={i} style={{fontSize:12,color:'var(--text-3)',lineHeight:1.6}}>• {s}</div>)}</div>}
+                  {r.improvements?.length>0 && <div><div style={{fontSize:12,color:'#f59e0b',fontWeight:600,marginBottom:5}}>⚠️ 可改進</div>{r.improvements.map((s,i)=><div key={i} style={{fontSize:12,color:'var(--text-3)',lineHeight:1.6}}>• {s}</div>)}</div>}
+                  {r.coachAdvice && <div style={{background:'rgba(6,182,212,0.07)',border:'1px solid rgba(6,182,212,0.15)',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:12,color:'#22d3ee',fontWeight:600,marginBottom:4}}>💡 教練建議</div><div style={{fontSize:12,color:'var(--text-3)',lineHeight:1.6}}>{r.coachAdvice}</div></div>}
+                  <button className="ui-btn ui-btn--danger ui-btn--sm" style={{alignSelf:'flex-end'}} onClick={()=>remove(r.fsId, r.id)}>🗑 刪除此筆</button>
                 </div>
               )}
             </div>
           );
         })}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1259,52 +1287,69 @@ function App() {
   const [nameInput,setNameInput]=useState('');
 
   if(!hasKey) return <ApiKeyModal onSaved={()=>setHasKey(true)}/>;
+  const commitName=()=>{ const n=nameInput.trim(); if(n){ saveUserName(n); setUserName(n); } };
   if(!userName) return (
-    <div style={{position:'fixed',inset:0,background:'#0a0e1a',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:'#111827',border:'1px solid rgba(99,102,241,0.3)',borderRadius:20,padding:32,maxWidth:380,width:'100%',boxShadow:'0 0 60px rgba(99,102,241,0.2)'}}>
-        <div style={{fontSize:28,textAlign:'center',marginBottom:8}}>👤</div>
+    <div style={{position:'fixed',inset:0,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div className="ui-modal" style={{maxWidth:380,padding:32}}>
+        <div style={{fontSize:28,textAlign:'center',marginBottom:8}} aria-hidden="true">👤</div>
         <h2 style={{textAlign:'center',fontSize:18,fontWeight:800,marginBottom:6}}>你的名字是？</h2>
-        <p style={{color:'rgba(255,255,255,0.5)',fontSize:13,textAlign:'center',marginBottom:20,lineHeight:1.6}}>用於記錄每次練習，讓團隊可以看到各自的進度。</p>
+        <p style={{color:'var(--text-3)',fontSize:13,textAlign:'center',marginBottom:20,lineHeight:1.6}}>用於記錄每次練習，讓團隊可以看到各自的進度。</p>
         <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&nameInput.trim()&&(saveUserName(nameInput),setUserName(nameInput.trim()))}
-          placeholder="輸入你的名字..." autoFocus
-          style={{width:'100%',padding:'12px 14px',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,color:'white',fontSize:14,outline:'none',marginBottom:8}}/>
-        <button onClick={()=>{if(nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());}}}
-          disabled={!nameInput.trim()}
-          style={{width:'100%',padding:'13px 0',background:'linear-gradient(135deg,#6366f1,#a855f7)',border:'none',borderRadius:10,color:'white',fontWeight:700,fontSize:15,cursor:nameInput.trim()?'pointer':'not-allowed',opacity:nameInput.trim()?1:0.5}}>開始練習</button>
+          onKeyDown={e=>e.key==='Enter'&&commitName()}
+          placeholder="輸入你的名字..." autoFocus aria-label="你的名字"
+          style={{width:'100%',minHeight:'var(--tap)',padding:'0 14px',background:'var(--surface-3)',border:'1px solid var(--line-strong)',borderRadius:10,color:'white',fontSize:15,outline:'none',marginBottom:10}}/>
+        <button className="ui-btn ui-btn--primary ui-btn--lg ui-btn--block" onClick={commitName} disabled={!nameInput.trim()}>開始練習</button>
       </div>
     </div>
   );
 
+  const changeKey=()=>{ clearApiKey(); setHasKey(false); };
+  const modalOpen=showHistory||showLeaderboard;
+
   return(
-    <div style={{minHeight:'100vh',background:'#0a0e1a',color:'white'}}>
+    <div style={{minHeight:'100vh',background:'var(--bg)',color:'var(--text-1)'}}>
       {showHistory && <HistoryModal onClose={()=>setShowHistory(false)}/>}
       {showLeaderboard && <LeaderboardModal onClose={()=>setShowLeaderboard(false)}/>}
-      {/* Header bar */}
-      <div style={{position:'fixed',top:0,right:0,zIndex:50,padding:'8px 12px',display:'flex',gap:8,alignItems:'center'}}>
-        {editingName ? (
-          <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
-            onBlur={()=>{if(nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());}setEditingName(false);}}
-            onKeyDown={e=>{if(e.key==='Enter'&&nameInput.trim()){saveUserName(nameInput);setUserName(nameInput.trim());setEditingName(false);}}}
-            autoFocus style={{padding:'4px 8px',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(99,102,241,0.4)',borderRadius:6,color:'white',fontSize:11,width:90,outline:'none'}}/>
-        ) : (
-          <button onClick={()=>{setNameInput(userName);setEditingName(true);}} style={{padding:'5px 10px',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:8,color:'rgba(255,255,255,0.6)',fontSize:11,cursor:'pointer'}}>👤 {userName}</button>
-        )}
-        <button onClick={()=>setShowLeaderboard(true)} style={{padding:'5px 10px',background:'rgba(255,215,0,0.08)',border:'1px solid rgba(255,215,0,0.2)',borderRadius:8,color:'rgba(255,215,0,0.7)',fontSize:11,cursor:'pointer'}}>🏆 排行榜</button>
-        <button onClick={()=>setShowHistory(true)} style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>📋 練習記錄</button>
-        <button onClick={()=>{clearApiKey();setHasKey(false);}} title="更換 API Key" style={{padding:'5px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.4)',fontSize:11,cursor:'pointer'}}>🔑 更換 Key</button>
-      </div>
+
+      {/* 頂部列：在文件流中（sticky），不再浮在內容上；手機只顯示圖示 */}
+      <header className="topbar">
+        <a className="topbar__brand" href="./" title="回到業務角色扮演轉盤">
+          <span aria-hidden="true">🎰</span><span className="hide-sm">業務角色扮演</span><span>AI 練習器</span>
+        </a>
+        <nav className="topbar__actions" aria-label="功能選單">
+          {editingName ? (
+            <input className="topbar__name-input" value={nameInput} onChange={e=>setNameInput(e.target.value)}
+              onBlur={()=>{commitName();setEditingName(false);}}
+              onKeyDown={e=>{if(e.key==='Enter'){commitName();setEditingName(false);} if(e.key==='Escape') setEditingName(false);}}
+              autoFocus aria-label="修改名字"/>
+          ) : (
+            <button className="ui-btn ui-btn--secondary" onClick={()=>{setNameInput(userName);setEditingName(true);}} title="修改名字" aria-label={`練習者：${userName}（點擊修改）`}>
+              <span aria-hidden="true">👤</span><span className="hide-sm">{userName}</span>
+            </button>
+          )}
+          <button className="ui-btn ui-btn--ghost" onClick={()=>setShowLeaderboard(true)} aria-label="排行榜" style={{color:'#fcd34d'}}>
+            <span aria-hidden="true">🏆</span><span className="hide-sm">排行榜</span>
+          </button>
+          <button className="ui-btn ui-btn--ghost" onClick={()=>setShowHistory(true)} aria-label="練習記錄">
+            <span aria-hidden="true">📋</span><span className="hide-sm">練習記錄</span>
+          </button>
+          <button className="ui-btn ui-btn--ghost" onClick={changeKey} title="更換 API Key" aria-label="更換 API Key">
+            <span aria-hidden="true">🔑</span><span className="hide-sm">更換 Key</span>
+          </button>
+        </nav>
+      </header>
 
       {phase==='setup'&&(
-        <div style={{maxWidth:1300,margin:'0 auto',padding:'24px 20px 40px'}}>
+        <div className="setup-wrap">
           <SetupPhase onStart={sel=>{setScenario(sel);setPhase('chat');}}/>
         </div>
       )}
       {phase==='chat'&&scenario&&(
-        <ChatPhase scenario={scenario} onEnd={(scen,log,mh)=>{setReviewData({scen,log,mh});setPhase('review');}}/>
+        <ChatPhase scenario={scenario} paused={modalOpen} onChangeKey={changeKey}
+          onEnd={(scen,log,mh)=>{setReviewData({scen,log,mh});setPhase('review');}}/>
       )}
       {phase==='review'&&reviewData&&(
-        <div style={{maxWidth:680,margin:'0 auto',padding:'24px 12px'}}>
+        <div className="review-wrap">
           <ReviewPhase scenario={reviewData.scen} log={reviewData.log} mHistory={reviewData.mh}
             onRetry={()=>{setPhase('chat');setReviewData(null);}}
             onNew={()=>{setPhase('setup');setScenario(null);setReviewData(null);}}/>

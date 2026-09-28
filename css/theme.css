@@ -1,0 +1,266 @@
+/* ============================================================
+   共用設計系統：轉盤頁（index.html）與 AI 練習頁（roleplay-ai.html）共用
+   顏色、字級、按鈕、頂部列、手機底部操作列、彈窗都定義在這裡。
+   ============================================================ */
+:root {
+  /* 底色與表面 */
+  --bg: #0a0e1a;
+  --surface: #111827;
+  --surface-2: rgba(255, 255, 255, 0.04);
+  --surface-3: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+
+  /* 文字：三層，最淡的一層在深色底上仍維持可讀（約 60% 白） */
+  --text-1: #f1f5f9;
+  --text-2: rgba(241, 245, 249, 0.78);
+  --text-3: rgba(241, 245, 249, 0.6);
+
+  /* 品牌色：靛藍 → 紫，輔色青 */
+  --brand: #6366f1;
+  --brand-rgb: 99, 102, 241;
+  --brand-2: #8b5cf6;
+  --brand-2-rgb: 139, 92, 246;
+  --brand-soft: #a5b4fc;
+  --cyan: #06b6d4;
+  --cyan-soft: #67e8f9;
+  --danger: #ef4444;
+  --danger-rgb: 239, 68, 68;
+  --danger-soft: #fca5a5;
+  --success: #22c55e;
+  --success-soft: #86efac;
+  --warn: #f59e0b;
+  --gold: #ffd700;
+
+  --grad-brand: linear-gradient(135deg, var(--brand), var(--brand-2));
+  --grad-title: linear-gradient(135deg, #818cf8, #a78bfa 55%, #22d3ee);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --tap: 44px;          /* 觸控目標最小尺寸 */
+  --topbar-h: 56px;
+  --font: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+}
+
+/* ---------- 標題 ---------- */
+.page-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  margin: 0;
+  font-size: clamp(1.5rem, 1.1rem + 2vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+/* emoji 放在漸層文字外面，避免被 background-clip:text 染成單色色塊 */
+.title-emoji { font-size: 0.95em; line-height: 1; }
+.gradient-text {
+  background: var(--grad-title);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.page-subtitle {
+  color: var(--text-3);
+  font-size: 0.95rem;
+  margin-top: 10px;
+}
+
+/* 中文標題與短標籤平衡斷行，避免最後一字孤立成一行 */
+.page-title, .page-subtitle, .balance { text-wrap: balance; }
+
+/* ---------- 按鈕 ---------- */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
+}
+.ui-btn:disabled { cursor: not-allowed; opacity: 0.45; }
+.ui-btn:focus-visible { outline: 2px solid var(--brand-soft); outline-offset: 2px; }
+.ui-btn:not(:disabled):active { transform: scale(0.98); }
+
+/* 主要行動：每個畫面只放一顆 */
+.ui-btn--primary {
+  background: var(--grad-brand);
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(var(--brand-rgb), 0.35);
+}
+.ui-btn--primary:not(:disabled):hover { box-shadow: 0 6px 32px rgba(var(--brand-rgb), 0.55); transform: translateY(-1px); }
+
+/* 次要行動：品牌色外框 */
+.ui-btn--secondary {
+  background: rgba(var(--brand-rgb), 0.12);
+  border-color: rgba(var(--brand-rgb), 0.45);
+  color: var(--brand-soft);
+}
+.ui-btn--secondary:not(:disabled):hover { background: rgba(var(--brand-rgb), 0.2); color: #fff; }
+
+/* 一般 / 輔助行動 */
+.ui-btn--ghost {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--text-2);
+}
+.ui-btn--ghost:not(:disabled):hover { background: var(--surface-3); border-color: rgba(var(--brand-rgb), 0.45); color: var(--text-1); }
+
+.ui-btn--danger {
+  background: rgba(var(--danger-rgb), 0.12);
+  border-color: rgba(var(--danger-rgb), 0.35);
+  color: var(--danger-soft);
+}
+.ui-btn--danger:not(:disabled):hover { background: rgba(var(--danger-rgb), 0.2); }
+
+.ui-btn--sm { min-height: 36px; padding: 0 14px; font-size: 0.85rem; border-radius: 8px; }
+.ui-btn--lg { min-height: 52px; padding: 0 32px; font-size: 1.05rem; border-radius: 12px; }
+.ui-btn--block { width: 100%; }
+
+/* ---------- 操作列：桌機置中一排；手機固定在畫面底部 ---------- */
+.action-bar {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.mobile-only { display: none !important; }
+
+@media (max-width: 640px) {
+  .action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin: 0 -16px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(10, 14, 26, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+  .action-bar .ui-btn { flex: 1 1 0; min-width: 0; padding: 0 10px; font-size: 0.9rem; }
+  .mobile-only { display: inline-flex !important; }
+  .desktop-only { display: none !important; }
+}
+
+/* ---------- 頂部列（AI 練習頁） ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+  background: rgba(10, 14, 26, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
+  white-space: nowrap;
+  min-height: var(--tap);
+}
+.topbar__brand:hover { color: var(--brand-soft); }
+.topbar__actions { display: flex; align-items: center; gap: 6px; }
+.topbar__actions .ui-btn { min-height: 38px; padding: 0 12px; font-size: 0.85rem; }
+.topbar__name-input {
+  min-height: 38px;
+  width: 110px;
+  padding: 0 10px;
+  background: var(--surface-3);
+  border: 1px solid rgba(var(--brand-rgb), 0.5);
+  border-radius: 8px;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .topbar { padding: 0 10px; gap: 6px; }
+  .topbar .hide-sm { display: none; }
+  .topbar__actions .ui-btn { min-width: var(--tap); min-height: var(--tap); padding: 0 10px; }
+}
+
+/* ---------- 彈窗 ---------- */
+.ui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px 12px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.8);
+  animation: fadeIn 0.15s ease;
+}
+.ui-modal {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid rgba(var(--brand-rgb), 0.25);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 0 60px rgba(var(--brand-rgb), 0.15);
+}
+.ui-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin: -10px -10px -10px 0;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-3);
+  font-size: 20px;
+  cursor: pointer;
+}
+.ui-modal__close:hover { color: var(--text-1); background: var(--surface-3); }
+.ui-modal__close:focus-visible { outline: 2px solid var(--brand-soft); }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- 提示條 ---------- */
+.ui-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(var(--danger-rgb), 0.1);
+  border: 1px solid rgba(var(--danger-rgb), 0.35);
+  color: var(--danger-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  animation: fadeIn 0.2s ease;
+}
+.ui-alert__text { flex: 1 1 200px; }
+.ui-alert__actions { display: flex; gap: 8px; }

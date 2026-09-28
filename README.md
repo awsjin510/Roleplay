@@ -20,6 +20,14 @@ npm run build      # 產出 js/roleplay-ai.min.js
 
 編譯產物 `js/roleplay-ai.min.js` 需要一併 commit（網站是純靜態託管）。打包目標為 ES2020（Firebase SDK 需要 BigInt）。
 
+## 樣式
+
+- **`css/theme.css`** — 兩頁共用的設計系統：色彩變數、按鈕（`ui-btn--primary / secondary / ghost / danger`）、頂部列、手機底部操作列、彈窗、提示條。改品牌色或按鈕樣式只需改這裡。
+- **`css/main.css`、`css/spinner.css`** — 轉盤頁專用版面。
+- **`css/roleplay-ai.css`** — AI 練習頁專用版面（轉盤欄、對話頁、手機版教練指標列）。
+
+原則：每個畫面只放一顆 `ui-btn--primary`；觸控目標至少 44px；手機寬度（≤ 640px）主要操作固定在畫面底部。
+
 ## 資料維護
 
 所有轉盤清單（業務名單、產品、產品服務、資安項目、產業、情境、難度、雲端環境）集中在 **`js/data.js`**，兩個頁面共用，改一處即可。AI 客戶的角色 / 產業 / 雲端 / 資安產品 / 難度行為設定在 **`js/profiles.js`**。改完後記得 `npm run build` 讓 AI 頁吃到新資料。
